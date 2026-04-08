@@ -1,0 +1,290 @@
+---
+title: "MapPropertyAttribute"
+description: "Reference for [MapProperty], [MapPropertyFromSource], [MapNestedProperties], [MapValue], [FormatProvider], [NamedMapping], [MappingTarget], and [IncludeMappingConfiguration]."
+---
+
+## MapPropertyAttribute
+
+Maps a specific source property (or property path) to a specific target property (or property path). Apply it to a mapping method. Multiple attributes can be stacked.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapProperty(nameof(Car.Model), nameof(CarDto.ModelName))]
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+You can traverse nested properties by joining names with `"."` or by supplying a `string[]` path.
+
+```csharp
+// Dot-separated string
+[MapProperty("Manufacturer.Name", "BrandName")]
+
+// Or string array path
+[MapProperty(new[] { "Manufacturer", "Name" }, new[] { "Brand", "Name" })]
+```
+
+### Properties
+
+<ParamField path="Source" type="string | string[]" required>
+  The source property name or path. Use `nameof()` for refactoring safety.
+
+  A path can be specified as a dot-separated string (`"Address.City"`) or as a `string[]` (`new[] { "Address", "City" }`).
+</ParamField>
+
+<ParamField path="Target" type="string | string[]" required>
+  The target property name or path. Use `nameof()` for refactoring safety.
+
+  A path can be specified as a dot-separated string or as a `string[]`.
+</ParamField>
+
+<ParamField path="StringFormat" type="string?">
+  Format string passed to `ToString(format)` when converting a source value that implements `IFormattable` to a string.
+
+  ```csharp
+  [MapProperty(nameof(Car.Price), nameof(CarDto.Price), StringFormat = "C")]
+  public partial CarDto MapCar(Car car);
+  // generates: target.Price = source.Price.ToString("C", ...)
+  ```
+</ParamField>
+
+<ParamField path="FormatProvider" type="string?">
+  Name of the format provider field or property (annotated with `[FormatProvider]`) to use during `IFormattable` conversions for this property.
+
+  If `null`, the mapper's default format provider is used (the one annotated with `[FormatProvider(Default = true)]`), or no provider if none is defined.
+
+  ```csharp
+  [FormatProvider]
+  private readonly IFormatProvider _enCulture = CultureInfo.GetCultureInfo("en-US");
+
+  [MapProperty(nameof(Car.Price), nameof(CarDto.Price), StringFormat = "C", FormatProvider = nameof(_enCulture))]
+  public partial CarDto MapCar(Car car);
+  ```
+</ParamField>
+
+<ParamField path="Use" type="string?">
+  Name of a user-implemented mapping method to use for this specific property. Use `nameof()` for refactoring safety.
+
+  The referenced method must have a compatible signature for the source and target property types.
+
+  ```csharp
+  [MapProperty(nameof(Car.Price), nameof(CarDto.Price), Use = nameof(MapPrice))]
+  public partial CarDto MapCar(Car source);
+
+  [UserMapping(Default = false)]
+  private string MapPrice(decimal price) => (price / 100).ToString("C");
+  ```
+</ParamField>
+
+<ParamField path="SuppressNullMismatchDiagnostic" type="bool" default="false">
+  When `true`, suppresses diagnostic RMG089 (null mismatch warning) for this specific property mapping.
+</ParamField>
+
+---
+
+## MapPropertyFromSourceAttribute
+
+Maps the entire source object to a property on the target. Useful when a target property holds a reference to the source type itself, or when you need access to the full source in a custom mapping method via `Use`.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapPropertyFromSource(nameof(CarChanges.OriginalCar))]
+    public partial CarChanges ToChanges(Car car);
+}
+```
+
+With a custom method that receives the full source:
+
+```csharp
+[MapPropertyFromSource(nameof(CarDto.NetPrice), Use = nameof(MapPrice))]
+public partial CarDto MapCar(Car source);
+
+private decimal MapPrice(Car car) => car.Price - car.Discount;
+// generates: target.NetPrice = MapPrice(source);
+```
+
+### Properties
+
+<ParamField path="Target" type="string | string[]" required>
+  The target property name or path to assign the source object to.
+</ParamField>
+
+<ParamField path="StringFormat" type="string?">
+  Format string for `IFormattable` conversions. See `MapPropertyAttribute.StringFormat`.
+</ParamField>
+
+<ParamField path="FormatProvider" type="string?">
+  Name of the format provider to use. See `MapPropertyAttribute.FormatProvider`.
+</ParamField>
+
+<ParamField path="Use" type="string?">
+  Name of a user-implemented method to call with the source object. The method receives the full source object and returns the target property value.
+</ParamField>
+
+---
+
+## MapNestedPropertiesAttribute
+
+Flattens all members of a nested source property to the root of the target. The opposite of nesting — it maps `source.Address.City` to `target.City` automatically for every member of the nested type.
+
+```csharp
+public class Order
+{
+    public Address ShippingAddress { get; set; }
+}
+
+public class OrderDto
+{
+    public string Street { get; set; }
+    public string City { get; set; }
+}
+
+[Mapper]
+public partial class OrderMapper
+{
+    [MapNestedProperties(nameof(Order.ShippingAddress))]
+    public partial OrderDto ToDto(Order order);
+    // Maps order.ShippingAddress.Street -> dto.Street
+    //       order.ShippingAddress.City  -> dto.City
+}
+```
+
+### Properties
+
+<ParamField path="Source" type="string | string[]" required>
+  The source property (or path) whose members should be flattened to the target root. Use `nameof()` or a `string[]` for nested paths.
+</ParamField>
+
+---
+
+## MapValueAttribute
+
+Assigns a constant value or method-generated value to a target property, without reading from the source.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    // Assign a constant
+    [MapValue(nameof(CarDto.Version), 1)]
+    public partial CarDto MapCar(Car car);
+
+    // Use a method to compute the value
+    [MapValue(nameof(CarDto.CreatedAt), Use = nameof(GetTimestamp))]
+    public partial CarDto MapCarWithTimestamp(Car car);
+
+    private DateTime GetTimestamp() => DateTime.UtcNow;
+}
+```
+
+### Properties
+
+<ParamField path="Target" type="string | string[]" required>
+  The target property name or path to assign the value to.
+</ParamField>
+
+<ParamField path="Value" type="object?">
+  The constant value to assign to the target property. Must be of the same type as the target property. Either `Value` or `Use` must be set.
+</ParamField>
+
+<ParamField path="Use" type="string?">
+  Name of a parameterless method whose return value is assigned to the target. The return type must exactly match the target property type. Either `Use` or `Value` must be set.
+</ParamField>
+
+---
+
+## FormatProviderAttribute
+
+Marks a field or property inside a mapper as a format provider. The field or property must implement `IFormatProvider` and have a getter.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [FormatProvider(Default = true)]
+    private IFormatProvider CurrentCulture => CultureInfo.CurrentCulture;
+
+    [FormatProvider]
+    private readonly IFormatProvider _enCulture = CultureInfo.GetCultureInfo("en-US");
+
+    [MapProperty(nameof(Car.Price), nameof(CarDto.Price), StringFormat = "C")]
+    [MapProperty(nameof(Car.ListPrice), nameof(CarDto.ListPrice), StringFormat = "C", FormatProvider = nameof(_enCulture))]
+    public partial CarDto MapCar(Car car);
+}
+```
+
+### Properties
+
+<ParamField path="Default" type="bool" default="false">
+  When `true`, this format provider is used automatically for all `IFormattable` conversions that do not specify an explicit `FormatProvider` on `[MapProperty]`.
+
+  Only one format provider per mapper can have `Default = true`.
+</ParamField>
+
+---
+
+## NamedMappingAttribute
+
+Assigns a custom name to a mapping method. Other attributes such as `[MapProperty(Use = ...)]` and `[MapPropertyFromSource(Use = ...)]` reference mappings by name, and by default use the method name. Use `[NamedMapping]` when you want a stable name independent of the method name.
+
+```csharp
+[NamedMapping("CustomMapPrice")]
+private decimal MapPrice(Car car) => car.Price - car.Discount;
+
+[MapPropertyFromSource(nameof(CarDto.NetPrice), Use = "CustomMapPrice")]
+public partial CarDto MapCar(Car source);
+```
+
+### Properties
+
+<ParamField path="Name" type="string" required>
+  The custom name for the mapping. Referenced by `Use` properties in `[MapProperty]` and `[MapPropertyFromSource]`.
+</ParamField>
+
+---
+
+## MappingTargetAttribute
+
+Marks a method parameter as the mapping target for update/merge mappings. When applied, Mapperly maps properties from the source onto the existing target instance rather than creating a new one.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial void UpdateCar(Car source, [MappingTarget] CarDto target);
+}
+```
+
+<Note>
+  `[MappingTarget]` is applied to a **parameter**, not to a method or property. The method return type is typically `void` when using a mapping target parameter.
+</Note>
+
+---
+
+## IncludeMappingConfigurationAttribute
+
+Includes the mapping configuration (all `[MapProperty]`, `[MapperIgnoreTarget]`, and similar attributes) from another mapping method in the current method. Useful for reusing property-level configuration across multiple mapping methods.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapProperty(nameof(Car.Model), nameof(CarDto.ModelName))]
+    [MapperIgnoreTarget(nameof(CarDto.InternalId))]
+    public partial CarDto MapCar(Car car);
+
+    // Reuses all [MapProperty] and ignore attributes from MapCar
+    [IncludeMappingConfiguration(nameof(MapCar))]
+    public partial CarDto MapCarForExport(Car car);
+}
+```
+
+### Properties
+
+<ParamField path="Name" type="string" required>
+  The method name of the mapping whose configuration should be included. Use `nameof()` for refactoring safety.
+</ParamField>

@@ -1,0 +1,123 @@
+---
+title: "Mapperly"
+description: "A .NET source generator that creates fast, readable object mappings at build time — no runtime reflection."
+---
+
+Mapperly generates object-to-object mapping code at compile time using .NET source generators. You define the mapping method signatures; Mapperly writes the implementation. The result is generated code that is fast, readable, and completely free of runtime reflection.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Add the NuGet package and configure your project in minutes
+  </Card>
+  <Card title="First mapper" icon="wand-magic-sparkles" href="/getting-started/first-mapper">
+    Create your first mapper with a few lines of C#
+  </Card>
+  <Card title="Mapping configuration" icon="sliders" href="/configuration/mapper">
+    Customize property mappings, null handling, and naming strategies
+  </Card>
+  <Card title="API reference" icon="code" href="/api/mapper-attribute">
+    Browse every attribute and configuration option
+  </Card>
+</CardGroup>
+
+## Why Mapperly?
+
+<CardGroup cols={2}>
+  <Card title="Zero runtime overhead" icon="bolt">
+    All mapping code is generated at build time. No reflection, no runtime cost.
+  </Card>
+  <Card title="AOT & trimming safe" icon="shield-check">
+    Because no reflection is used, Mapperly works seamlessly with NativeAOT and trimmed applications.
+  </Card>
+  <Card title="Readable output" icon="eye">
+    Generated code looks like code you would write by hand — easy to inspect and debug.
+  </Card>
+  <Card title="Compile-time safety" icon="triangle-exclamation">
+    Unmapped members produce compiler warnings or errors, catching mistakes before runtime.
+  </Card>
+</CardGroup>
+
+## Quick start
+
+<Steps>
+  <Step title="Install the NuGet package">
+    ```bash
+    dotnet add package Riok.Mapperly
+    ```
+  </Step>
+  <Step title="Declare your mapper">
+    Create a `partial` class and apply the `[Mapper]` attribute. Define mapping method signatures — Mapperly generates the implementations.
+
+    ```csharp CarMapper.cs
+    using Riok.Mapperly.Abstractions;
+
+    [Mapper]
+    public partial class CarMapper
+    {
+        public partial CarDto CarToCarDto(Car car);
+    }
+    ```
+  </Step>
+  <Step title="Use the mapper">
+    ```csharp
+    var mapper = new CarMapper();
+    var dto = mapper.CarToCarDto(car);
+    ```
+  </Step>
+  <Step title="Inspect the generated code">
+    Mapperly writes readable C# that you can read directly in your IDE — no magic at runtime.
+
+    ```csharp Generated code
+    public partial class CarMapper
+    {
+        public partial CarDto CarToCarDto(Car car)
+        {
+            var target = new CarDto();
+            target.Id = car.Id;
+            target.Name = car.Name;
+            target.NumberOfSeats = car.NumberOfSeats;
+            return target;
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Performance
+
+Mapperly is one of the fastest .NET object mappers available, outperforming even hand-written mapping code in some benchmarks.
+
+| Method        | Mean       | Allocated |
+| ------------- | ---------: | --------: |
+| AgileMapper   | 1,523.8 ns | 3,160 B   |
+| AutoMapper    | 1,203.9 ns | 1,904 B   |
+| ManualMapping |   529.6 ns | 1,160 B   |
+| Mapster       |   562.1 ns | 1,904 B   |
+| **Mapperly**  | **338.5 ns** | **920 B** |
+
+<Info>
+  Benchmark data from [Benchmark.netCoreMappers](https://github.com/mjebrahimi/Benchmark.netCoreMappers).
+</Info>
+
+## Explore the docs
+
+<CardGroup cols={3}>
+  <Card title="Enum mapping" icon="list" href="/configuration/enum">
+    Map enums by value or name with configurable strategies
+  </Card>
+  <Card title="IQueryable projections" icon="database" href="/configuration/queryable-projections">
+    Optimize ORM queries with expression-tree projections
+  </Card>
+  <Card title="Reference handling" icon="arrows-spin" href="/configuration/reference-handling">
+    Handle circular references safely
+  </Card>
+  <Card title="External mappers" icon="puzzle-piece" href="/configuration/external-mappings">
+    Compose mappings across multiple mapper classes
+  </Card>
+  <Card title="User-implemented methods" icon="pencil" href="/configuration/user-implemented-methods">
+    Mix generated and hand-written mapping logic
+  </Card>
+  <Card title="Upgrading" icon="arrow-up" href="/upgrading/v5">
+    Migration guides for major version upgrades
+  </Card>
+</CardGroup>

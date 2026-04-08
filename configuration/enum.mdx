@@ -1,0 +1,169 @@
+---
+title: "Enum mappings"
+description: "Configure how enums are mapped between types and to or from strings."
+keywords: ["enum", "MapEnum", "EnumMappingStrategy", "ByValue", "ByName", "string enum", "FallbackValue"]
+---
+
+Mapperly maps enums by value by default. Use `[MapEnum]` on a mapping method or set `EnumMappingStrategy` on the mapper to change the strategy.
+
+## Mapping strategies
+
+| Strategy             | Description                                                              |
+| -------------------- | ------------------------------------------------------------------------ |
+| `ByValue`            | Matches enum members by their underlying integer value (default)         |
+| `ByValueCheckDefined`| Matches by value and throws (or uses fallback) if the value is not defined in the target enum |
+| `ByName`             | Matches enum members by their exact name                                 |
+
+The `IgnoreCase` property opts into case-insensitive name matching (applies to `ByName` and string mappings). It defaults to `false`.
+
+<Tabs>
+  <Tab title="Global (mapper level)">
+    Applies to all enum mappings in the mapper. Individual methods can override this.
+
+    ```csharp
+    [Mapper(EnumMappingStrategy = EnumMappingStrategy.ByName, EnumMappingIgnoreCase = true)]
+    public partial class CarMapper
+    {
+        public partial CarMakeDto MapMake(CarMake make);
+    }
+    ```
+  </Tab>
+  <Tab title="Per method">
+    Applies only to the enum mapped by this method. Valid only on methods where both parameter and return type are enums.
+
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        [MapEnum(EnumMappingStrategy.ByName, IgnoreCase = true)]
+        public partial CarMakeDto MapMake(CarMake make);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Enum-to-string naming strategies
+
+When mapping an enum to or from a `string`, use `NamingStrategy` (on `[MapEnum]`) or `EnumNamingStrategy` (on `[Mapper]` / `[MapperDefaults]`) to control which string representation is used.
+
+| Strategy                           | Description                                                                                       |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `MemberName`                       | Uses the enum member name as-is (default)                                                        |
+| `CamelCase`                        | Converts to `camelCase`                                                                           |
+| `PascalCase`                       | Converts to `PascalCase`                                                                          |
+| `SnakeCase`                        | Converts to `snake_case`                                                                          |
+| `UpperSnakeCase`                   | Converts to `UPPER_SNAKE_CASE`                                                                    |
+| `KebabCase`                        | Converts to `kebab-case`                                                                          |
+| `UpperKebabCase`                   | Converts to `UPPER-KEBAB-CASE`                                                                    |
+| `ComponentModelDescriptionAttribute` | Uses the `Description` property of `[System.ComponentModel.Description]`. Falls back to member name if the attribute is absent or the value is null. |
+| `SerializationEnumMemberAttribute` | Uses the `Value` property of `[System.Runtime.Serialization.EnumMember]`. Falls back to member name if the attribute is absent or the value is null. |
+
+<Note>
+  Explicit enum value mappings (`[MapEnumValue]`) and fallback values (`FallbackValue`) are not affected by naming strategies.
+</Note>
+
+<Tabs>
+  <Tab title="Global (mapper level)">
+    ```csharp
+    [Mapper(EnumNamingStrategy = EnumNamingStrategy.SnakeCase)]
+    public partial class CarMapper
+    {
+        public partial string MapMakeToString(CarMake make);
+    }
+    ```
+  </Tab>
+  <Tab title="Per method">
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        [MapEnum(EnumMappingStrategy.ByName, NamingStrategy = EnumNamingStrategy.SnakeCase)]
+        public partial CarMakeDto MapMake(CarMake make);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Manually mapped enum values
+
+Use `[MapEnumValue]` to explicitly map specific enum values. This works for enum-to-enum, enum-to-string, and string-to-enum mappings. Explicit mappings are not affected by naming strategies.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapEnum(EnumMappingStrategy.ByName)]
+    [MapEnumValue(CarFeature.AWD, CarFeatureDto.AllWheelDrive)]
+    public partial CarFeatureDto MapFeature(CarFeature feature);
+
+    [MapEnumValue("AWD", CarFeatureDto.AllWheelDrive)]
+    public partial CarFeatureDto MapFeatureFromString(string feature);
+
+    [MapEnumValue(CarFeatureDto.AllWheelDrive, "AWD")]
+    public partial string MapFeatureToString(CarFeatureDto feature);
+}
+```
+
+## Ignore enum values
+
+Use `[MapperIgnoreSourceValue]` or `[MapperIgnoreTargetValue]` to exclude specific enum members from mapping. This is especially useful with [strict enum mappings](#strict-enum-mappings).
+
+```csharp
+[Mapper]
+public partial class FruitMapper
+{
+    [MapperIgnoreSourceValue(Fruit.Apple)]
+    [MapperIgnoreTargetValue(FruitDto.Pineapple)]
+    public partial FruitDto Map(Fruit source);
+}
+```
+
+## Fallback value
+
+Instead of throwing when an unknown value is encountered, set `FallbackValue` on `[MapEnum]` to return a specific value. This is supported by `ByName` and `ByValueCheckDefined` strategies.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapEnum(EnumMappingStrategy.ByName, FallbackValue = CarFeatureDto.Unknown)]
+    public partial CarFeatureDto MapFeature(CarFeature feature);
+}
+```
+
+<Note>
+  `FallbackValue` is not affected by naming strategies.
+</Note>
+
+## Strict enum mappings
+
+By default, Mapperly emits a warning for unmapped source or target enum members. Use `RequiredEnumMappingStrategy` to control which side is enforced. By default this inherits the value from `RequiredMappingStrategy`.
+
+| Value    | Description                                                      |
+| -------- | ---------------------------------------------------------------- |
+| `Both`   | Warn for unmapped source and target enum members (default)       |
+| `Source` | Warn only for unmapped source enum members                       |
+| `Target` | Warn only for unmapped target enum members                       |
+| `None`   | Do not warn for unmapped enum members                            |
+
+<Tabs>
+  <Tab title="Global (mapper level)">
+    ```csharp
+    [Mapper(RequiredEnumMappingStrategy = RequiredMappingStrategy.Source)]
+    public partial class CarMapper
+    {
+        public partial CarFeatureDto MapFeature(CarFeature feature);
+    }
+    ```
+  </Tab>
+  <Tab title="Per method">
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        [MapperRequiredMapping(RequiredMappingStrategy.Source)]
+        public partial CarFeatureDto MapFeature(CarFeature feature);
+    }
+    ```
+  </Tab>
+</Tabs>

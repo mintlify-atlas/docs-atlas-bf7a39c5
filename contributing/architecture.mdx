@@ -1,0 +1,113 @@
+---
+title: "Architecture"
+description: "An overview of Mapperly's internal architecture for contributors."
+keywords: ["architecture", "source generator", "roslyn", "pipeline", "internals", "code generation"]
+---
+
+Mapperly is an incremental .NET source generator. If you are new to source generators, the Roslyn team's [source generators cookbook](https://github.com/dotnet/roslyn/blob/main/docs/features/source-generators.cookbook.md) and [incremental generators](https://github.com/dotnet/roslyn/blob/main/docs/features/incremental-generators.md) documentation are good starting points.
+
+## Solution structure
+
+| Directory | Contents |
+|-----------|----------|
+| `benchmarks` | Performance benchmarks for the generated code and the source generator itself |
+| `build` | Build scripts, including the multi-targeting package script |
+| `docs` | Mapperly documentation |
+| `samples` | Sample mapper implementations using Mapperly |
+| `src/Riok.Mapperly` | The source generator implementation |
+| `src/Riok.Mapperly.Abstractions` | Attributes and abstractions used by application code to configure Mapperly. Referenced by the source generator but not needed at runtime (except for some features such as reference handling) |
+| `test` | Unit and integration tests |
+
+## Key namespaces in `Riok.Mapperly`
+
+The source generator project is organized into the following top-level directories:
+
+| Directory | Purpose |
+|-----------|---------|
+| `Configuration/` | Reads mapper and mapping configuration from attributes (`MapperConfigurationReader`, `MappingConfigurationReader`, etc.) |
+| `Descriptors/` | Core pipeline: descriptor builders, mapping builders, mapping body builders, and the mapping model |
+| `Diagnostics/` | Diagnostic descriptors (`DiagnosticDescriptors.cs`) and the diagnostic collection |
+| `Emit/` | Code emission via Roslyn `SyntaxFactory` — the `SourceEmitter` and `SyntaxFactoryHelper` |
+| `Helpers/` | Shared utilities |
+| `Symbols/` | Symbol accessor and well-known type resolution |
+| `Output/` | Output coordination |
+| `MapperGenerator.cs` | Entry point — the incremental source generator registered with Roslyn |
+| `SyntaxProvider.cs` | Locates mapper declarations in the compilation |
+
+## Generation pipeline
+
+For each class annotated with `[Mapper]`, Mapperly runs the following process. The central coordinator is `DescriptorBuilder`, which constructs a `MapperDescriptor` containing all mappings for a single mapper.
+
+<Steps>
+  <Step title="Discover mapper declarations">
+    `SyntaxProvider` uses Roslyn's incremental generator APIs to locate all classes annotated with `[MapperAttribute]` in the compilation. Each discovered mapper creates one `DescriptorBuilder` instance.
+  </Step>
+  <Step title="Extract configuration">
+    `DescriptorBuilder` reads mapper-level configuration from attributes using `MapperConfigurationReader` and `MappingConfigurationReader`. The result is a `MapperConfiguration` and per-mapping `MappingConfiguration` objects.
+  </Step>
+  <Step title="Collect user-defined mappings">
+    User-implemented and user-defined mapping methods are discovered. For each one, a `User*Mapping` instance (e.g., `UserDefinedNewInstanceMethodMapping`) is created and added to the mapping work queue.
+  </Step>
+  <Step title="Collect supporting infrastructure">
+    Object factories, format providers, and external mappings are extracted from the mapper class and registered on the `DescriptorBuilder`.
+  </Step>
+  <Step title="Build mapping bodies">
+    For each mapping in the queue, a `*MappingBodyBuilder` builds the mapping implementation. Body builders iterate over source members and call back into `DescriptorBuilder` to resolve or create mappings for each member's type pair. To resolve a type-to-type mapping, `DescriptorBuilder` tries each registered `*MappingBuilder` in order. Each mapping builder represents one mapping strategy (e.g., `ExplicitCastMappingBuilder`, `EnumToEnumMappingBuilder`, `NewInstanceObjectMemberMappingBuilder`). Successfully resolved mappings are added back to the queue so their own bodies can be built.
+  </Step>
+  <Step title="Emit code">
+    `SourceEmitter` walks the completed `MapperDescriptor` and emits a Roslyn syntax tree using `SyntaxFactory` and `SyntaxFactoryHelper`. `SyntaxFactoryHelper` simplifies constructing well-formatted syntax nodes. When indentation context is needed, the helper instance on `SourceEmitterContext` or `TypeMappingBuildContext` is used.
+  </Step>
+</Steps>
+
+## Mapping builders
+
+Each `*MappingBuilder` in `Descriptors/MappingBuilders/` handles one specific mapping strategy. They are tried in order until one succeeds. Examples:
+
+| Builder | Strategy |
+|---------|----------|
+| `DirectAssignmentMappingBuilder` | Direct assignment when types are identical or implicitly assignable |
+| `ExplicitCastMappingBuilder` | Explicit cast between compatible types |
+| `ImplicitCastMappingBuilder` | Implicit cast |
+| `NullableMappingBuilder` | Wrapping/unwrapping nullable types |
+| `EnumToEnumMappingBuilder` | Enum-to-enum mapping |
+| `EnumToStringMappingBuilder` / `StringToEnumMappingBuilder` | Enum/string conversions |
+| `NewInstanceObjectMemberMappingBuilder` | Creating a new target instance and mapping members |
+| `DictionaryMappingBuilder` | Dictionary mappings |
+| `EnumerableMappingBuilder` | `IEnumerable` and collection mappings |
+| `QueryableMappingBuilder` | `IQueryable` projection mappings |
+| `CtorMappingBuilder` | Constructor-based mappings |
+| `ParseMappingBuilder` | `TryParse` / `Parse` method mappings |
+| `ToStringMappingBuilder` | `ToString()` mappings |
+| `InlineExpressionMappingBuilder` | Inline expression mappings |
+
+## Roslyn multi-targeting
+
+Mapperly targets multiple Roslyn versions by building separate NuGet packages per version and merging them into a single package. This is required to support new C# language features (such as `required` members introduced in C# 11) while still supporting older compiler versions.
+
+The build logic lives in `build/package.sh`. Version-specific build props are in `src/Riok.Mapperly/`:
+
+- `Riok.Mapperly.Roslyn4.8.props`
+- `Riok.Mapperly.Roslyn4.11.props`
+- `Riok.Mapperly.Roslyn4.14.props`
+- `Riok.Mapperly.Roslyn5.0.props`
+
+Each file defines compiler constants and dependencies for its Roslyn version. The default `ROSLYN_VERSION` is set in `Riok.Mapperly.csproj`.
+
+<Note>
+To add support for a new Roslyn version, see [Common tasks — Add support for a new Roslyn version](/contributing/common-tasks#add-support-for-a-new-roslyn-version).
+</Note>
+
+## C# language feature constraints
+
+The source generator targets `.netstandard2.0` but uses the latest C# language version. Polyfills are provided by [`Meziantou.Polyfill`](https://github.com/meziantou/Meziantou.Polyfill). Some newer language features depend on runtime capabilities that are not available on `netstandard2.0` and therefore cannot be used in the generator itself.
+
+A useful reference for C# language feature requirements by target framework is available at [sergeyteplyakov.github.io](https://sergeyteplyakov.github.io/Blog/c%23/2024/03/06/CSharp_Language_Features_vs_Target_Frameworks.html).
+
+## Working with Roslyn syntax trees
+
+Mapperly uses Roslyn syntax trees for all generated code. Two tools are invaluable when working with them:
+
+- **[RoslynQuoter](https://roslynquoter.azurewebsites.net/)** — paste C# code and get the `SyntaxFactory` calls needed to produce it
+- **[SharpLab](https://sharplab.io/)** — explore how C# code compiles and what the syntax tree looks like
+
+The `Riok.Mapperly.Emit.Syntax.SyntaxFactoryHelper` class and `Microsoft.CodeAnalysis.CSharp.SyntaxFactory` are the primary APIs used to construct syntax trees inside Mapperly.

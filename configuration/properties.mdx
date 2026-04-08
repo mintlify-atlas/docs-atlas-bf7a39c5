@@ -1,0 +1,443 @@
+---
+title: "Property and field mappings"
+description: "Map, rename, flatten, and ignore properties and fields in Mapperly."
+keywords: ["MapProperty", "flattening", "ignore", "property mapping", "field mapping", "constructor mapping"]
+---
+
+Mapperly automatically maps properties and fields with matching names. Use the attributes described on this page to handle renames, flattening, ignoring members, and more.
+
+## Renaming properties
+
+Use `[MapProperty]` on a mapping method to map a source property to a differently named target property. The use of `nameof` is encouraged.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapProperty(nameof(Car.Model), nameof(CarDto.ModelName))]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+## Mapping the source object itself
+
+Use `[MapPropertyFromSource]` to map the entire source object to a target property:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapPropertyFromSource(nameof(CarChanges.OriginalCar))]
+    public partial CarChanges ToChanges(Car car);
+}
+```
+
+## Flattening and unflattening
+
+Mapperly automatically flattens nested properties using PascalCase conventions. For example, `Car.Make.Id` is mapped to `CarDto.MakeId` without any additional configuration.
+
+When the automatic resolution doesn't work, configure flattening manually with `[MapProperty]` using either an array path or a dot-separated string:
+
+```csharp
+// Array path
+[MapProperty([nameof(Car.Make), nameof(Make.Id)], nameof(CarDto.MakeId))]
+// Dot-separated string
+[MapProperty("Make.Id", "MakeId")]
+public partial CarDto Map(Car car);
+```
+
+<Info>
+  Unflattening (mapping `CarDto.MakeId` back to `Car.Make.Id`) is not configured automatically and must be set up manually using `[MapProperty]`.
+</Info>
+
+### Flattening all members of a nested property
+
+If a nested object has many members to flatten, use `[MapNestedProperties]` to bring all sub-members of a property into scope as if they were defined directly on the source:
+
+```csharp
+// Instead of:
+[MapProperty([nameof(Car.Engine), nameof(Engine.Horsepower)], nameof(CarDto.Horsepower))]
+[MapProperty([nameof(Car.Engine), nameof(Engine.FuelType)], nameof(CarDto.FuelType))]
+[MapProperty([nameof(Car.Engine), nameof(Engine.Cylinders)], nameof(CarDto.Cylinders))]
+
+// Use:
+[MapNestedProperties(nameof(Car.Engine))]
+public partial CarDto Map(Car car);
+```
+
+<Info>
+  Immediate members of the source object take priority over nested members. Automatic flattening (e.g. `CarDto.EngineId` → `Car.Engine.Id`) also takes precedence over nested members from `[MapNestedProperties]`.
+</Info>
+
+<Warning>
+  If multiple `[MapNestedProperties]` attributes contain members that match the same target, no guarantees are made about which source member is chosen. Use an explicit `[MapProperty]` to resolve the ambiguity.
+</Warning>
+
+## Ignoring members
+
+### Ignore per mapping method
+
+Use `[MapperIgnoreTarget]` or `[MapperIgnoreSource]` on a mapping method to ignore specific members for that method:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapperIgnoreTarget(nameof(CarDto.MakeId))]
+    [MapperIgnoreSource(nameof(Car.Id))]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+### Ignore at definition
+
+Apply `[MapperIgnore]` directly on a property, field, or method to exclude it from all mappings:
+
+```csharp
+public class Car
+{
+    [MapperIgnore]
+    public int Id { get; set; }
+
+    public string ModelName { get; set; }
+}
+```
+
+`[MapperIgnore]` also works on candidate conversion methods (e.g. `Parse`, `ToTarget`) to prevent them from being used:
+
+```csharp
+public class A
+{
+    // Prevents Parse(string) from being used in string → A mappings
+    [MapperIgnore]
+    public static A Parse(string s) => new();
+
+    // This factory method is still considered
+    public static A Create(string s) => new();
+}
+```
+
+<Note>
+  If `[MapperIgnore]` is applied in a project other than the mapper's project, that project must preserve Mapperly attributes at runtime. See [Installation](/getting-started/installation) for details.
+</Note>
+
+### Ignore obsolete members
+
+By default, Mapperly maps members marked with `[Obsolete]`. Change this with `IgnoreObsoleteMembersStrategy`.
+
+| Value    | Description                                              |
+| -------- | -------------------------------------------------------- |
+| `None`   | Maps obsolete members (default)                          |
+| `Both`   | Ignores obsolete source and target members               |
+| `Source` | Ignores obsolete source members only                     |
+| `Target` | Ignores obsolete target members only                     |
+
+<Tabs>
+  <Tab title="Global (mapper level)">
+    ```csharp
+    [Mapper(IgnoreObsoleteMembersStrategy = IgnoreObsoleteMembersStrategy.Both)]
+    public partial class CarMapper
+    {
+        public partial CarDto ToDto(Car car);
+    }
+    ```
+  </Tab>
+  <Tab title="Per method">
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        [MapperIgnoreObsoleteMembers(IgnoreObsoleteMembersStrategy.Both)]
+        public partial CarMakeDto MapMake(CarMake make);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## String format
+
+Use the `StringFormat` property on `[MapProperty]` to pass a format string to `ToString` conversions:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapProperty(nameof(Car.Price), nameof(CarDto.Price), StringFormat = "C")]
+    public partial CarDto MapCar(Car car);
+}
+```
+
+## Format provider
+
+To control the culture or format provider used in `ToString` and `Parse` conversions, annotate a field or property in the mapper with `[FormatProvider]`. Set `Default = true` to use it automatically for all compatible conversions.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [FormatProvider(Default = true)]
+    private IFormatProvider CurrentCulture => CultureInfo.CurrentCulture;
+
+    [FormatProvider]
+    private readonly IFormatProvider _enCulture = CultureInfo.GetCultureInfo("en-US");
+
+    [MapProperty(nameof(Car.LocalPrice), nameof(CarDto.LocalPrice), StringFormat = "C")]
+    [MapProperty(nameof(Car.ListPrice), nameof(CarDto.ListPrice), StringFormat = "C", FormatProvider = nameof(_enCulture))]
+    public partial CarDto MapCar(Car car);
+
+    // Generates:
+    // target.LocalPrice = source.LocalPrice.ToString("C", CurrentCulture);
+    // target.ListPrice = source.ListPrice.ToString("C", _enCulture);
+}
+```
+
+Only one format provider per mapper can be marked as `Default`.
+
+## User-implemented property mappings
+
+Use the `Use` property on `[MapProperty]` to call a specific user-implemented method for a particular property:
+
+<Tabs>
+  <Tab title="AutoUserMappings enabled (default)">
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        [MapProperty(nameof(Car.Price), nameof(CarDto.Price), Use = nameof(MapPrice))]
+        public partial CarDto MapCar(Car source);
+
+        // Default = false prevents this from being used for all decimal → string conversions
+        [UserMapping(Default = false)]
+        private string MapPrice(decimal price) => (price / 100).ToString("C");
+
+        // Generates: target.Price = MapPrice(source.Price);
+    }
+    ```
+  </Tab>
+  <Tab title="AutoUserMappings disabled">
+    ```csharp
+    [Mapper(AutoUserMappings = false)]
+    public partial class CarMapper
+    {
+        [MapProperty(nameof(Car.Price), nameof(CarDto.Price), Use = nameof(MapPrice))]
+        public partial CarDto MapCar(Car source);
+
+        private string MapPrice(decimal price) => (price / 100).ToString("C");
+
+        // Generates: target.Price = MapPrice(source.Price);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+`Use` also works on `[MapPropertyFromSource]` to access multiple source properties in the mapping method:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapPropertyFromSource(nameof(CarDto.NetPrice), Use = nameof(MapPrice))]
+    public partial CarDto MapCar(Car source);
+
+    private decimal MapPrice(Car car) => car.Price - car.Discount;
+
+    // Generates: target.NetPrice = MapPrice(source);
+}
+```
+
+### Custom mapping names
+
+By default, Mapperly uses the method name as the mapping identifier. Override this with `[NamedMapping]`:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapPropertyFromSource(nameof(CarDto.NetPrice), Use = "CustomMapPrice")]
+    public partial CarDto MapCar(Car source);
+
+    [NamedMapping("CustomMapPrice")]
+    private decimal MapPrice(Car car) => car.Price - car.Discount;
+}
+```
+
+## Mapping to existing target objects
+
+To update an existing object instead of creating a new one, declare the mapping method as `void` with the target as the second parameter:
+
+<Tabs>
+  <Tab title="Declaration">
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        public partial void UpdateCarDto(Car car, CarDto dto);
+    }
+    ```
+  </Tab>
+  <Tab title="Usage">
+    ```csharp
+    var mapper = new CarMapper();
+    var car = new Car { NumberOfSeats = 10 };
+    var dto = new CarDto();
+
+    mapper.UpdateCarDto(car, dto);
+    // dto.NumberOfSeats == 10
+    ```
+  </Tab>
+</Tabs>
+
+Use `[MappingTarget]` on the first parameter to enable extension method syntax:
+
+```csharp
+[Mapper(AllowNullPropertyAssignment = false)]
+static partial class FruitMapper
+{
+    public static partial void ApplyUpdate([MappingTarget] this Fruit fruit, FruitUpdate update);
+}
+
+// Usage:
+myFruit.ApplyUpdate(myUpdateRequest);
+```
+
+Setting `AllowNullPropertyAssignment = false` skips `null` source values, which is useful for merge/patch scenarios.
+
+## Constructor mappings
+
+Mapperly maps constructor parameters case-insensitively by name. Use `[MapProperty]` to override the mapping for a specific parameter:
+
+```csharp
+public class Car
+{
+    public string ModelName { get; set; }
+}
+
+public record CarDto(string Model);
+
+[Mapper]
+public partial class CarMapper
+{
+    [MapProperty(nameof(Car.ModelName), nameof(CarDto.Model))]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+For classes where the constructor parameter name differs from the property name, use a string literal:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapProperty(nameof(Car.ModelName), "model")]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+See [Mapper configuration](/configuration/mapper#constructor-selection) for how Mapperly selects which constructor to use.
+
+## Constant and generated values
+
+Use `[MapValue]` to assign a fixed constant or method-generated value to a target member:
+
+<Tabs>
+  <Tab title="Constant value">
+    ```csharp
+    [MapValue(nameof(CarDto.SourceSystem), "C1")]
+    public partial CarDto Map(Car car);
+
+    // Generates: target.SourceSystem = "C1";
+    ```
+  </Tab>
+  <Tab title="Method-generated value">
+    ```csharp
+    [MapValue(nameof(CarDto.SourceSystem), Use = nameof(GetSourceSystem))]
+    public partial CarDto Map(Car car);
+
+    string GetSourceSystem() => "C1";
+
+    // Generates: target.SourceSystem = GetSourceSystem();
+    ```
+  </Tab>
+</Tabs>
+
+## Additional mapping parameters
+
+A mapping method can accept additional parameters beyond the source object. Each extra parameter is matched to a target member by name (case-insensitive) and has lower priority than `[MapProperty]` but higher than automatic name matching.
+
+<Tabs>
+  <Tab title="Declaration">
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        public partial CarDto Map(Car source, string name);
+    }
+
+    public class CarDto
+    {
+        public string Brand { get; set; }
+        public string Model { get; set; }
+        public string Name { get; set; }
+    }
+    ```
+  </Tab>
+  <Tab title="Generated code">
+    ```csharp
+    public partial CarDto Map(Car source, string name)
+    {
+        var target = new CarDto();
+        target.Brand = source.Brand;
+        target.Model = source.Model;
+        target.Name = name;
+        return target;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  Additional parameters are not passed to nested mappings. A mapping with additional parameters cannot be the default mapping for a given type pair, and is not supported in generic, runtime-target, or derived type mappings.
+</Info>
+
+## Derived type mapping
+
+For base types and interfaces, use `[MapDerivedType]` to tell Mapperly which concrete types to map:
+
+<Tabs>
+  <Tab title="Declaration">
+    ```csharp
+    [Mapper]
+    public static partial class ModelMapper
+    {
+        [MapDerivedType<Banana, BananaDto>]       // C# 11+
+        [MapDerivedType(typeof(Apple), typeof(AppleDto))]  // C# < 11
+        public static partial FruitDto MapFruit(Fruit source);
+    }
+
+    abstract class Fruit {}
+    class Banana : Fruit {}
+    class Apple : Fruit {}
+
+    abstract class FruitDto {}
+    class BananaDto : FruitDto {}
+    class AppleDto : FruitDto {}
+    ```
+  </Tab>
+  <Tab title="Generated code">
+    ```csharp
+    public static partial FruitDto MapFruit(Fruit source)
+    {
+        return source switch
+        {
+            Banana x => MapToBananaDto(x),
+            Apple x => MapToAppleDto(x),
+            _ => throw new ArgumentException(
+                $"Cannot map {source.GetType()} to FruitDto as there is no known derived type mapping",
+                nameof(source)),
+        };
+    }
+    ```
+  </Tab>
+</Tabs>
+
+All source types in `[MapDerivedType]` must extend or implement the mapping method's parameter type. All target types must extend or implement the return type. Each source type must be unique, but multiple source types can map to the same target type.

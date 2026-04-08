@@ -1,0 +1,272 @@
+---
+title: "External mappings"
+description: "Compose mappings from multiple mapper classes using UseMapper and UseStaticMapper."
+keywords: ["external mappings", "UseMapper", "UseStaticMapper", "compose mappers", "assembly mapper", "named mapping"]
+---
+
+Mapperly can use mapping methods implemented in other classes. You register those classes with `[UseStaticMapper]` or `[UseMapper]`, and Mapperly will automatically call their methods when it needs a matching type conversion.
+
+## UseStaticMapper and UseMapper
+
+<Tabs>
+  <Tab title="Static">
+    Apply `[UseStaticMapper(typeof(X))]` to your mapper class to include all static mapping methods from another class:
+
+    ```csharp
+    [Mapper]
+    [UseStaticMapper(typeof(BananaMapper))]
+    public static partial class BoxMapper
+    {
+        public static partial BananaBox MapBananaBox(BananaBoxDto dto);
+    }
+
+    public static class BananaMapper
+    {
+        public static Banana MapBanana(BananaDto dto)
+            => new Banana(dto.Weight);
+    }
+    ```
+  </Tab>
+  <Tab title="Instance">
+    Apply `[UseMapper]` to a field or property to include its instance mapping methods:
+
+    ```csharp
+    [Mapper]
+    public partial class BoxMapper
+    {
+        [UseMapper]
+        private readonly BananaMapper _bananaMapper = new();
+
+        public partial BananaBox MapBananaBox(BananaBoxDto dto);
+    }
+
+    public class BananaMapper
+    {
+        public Banana MapBanana(BananaDto dto)
+            => new Banana(dto.Weight);
+    }
+    ```
+
+    <Note>
+      You are responsible for initializing fields and properties marked with `[UseMapper]`.
+    </Note>
+  </Tab>
+</Tabs>
+
+Whenever Mapperly needs a mapping from `BananaDto` to `Banana` inside `BoxMapper`, it will use the implementation from `BananaMapper`.
+
+External mappers can themselves be Mapperly-backed classes. The [`AutoUserMappings`](/configuration/user-implemented-methods) setting also applies to external mapper discovery.
+
+## Assembly-level external mappers
+
+To make external mapper methods available to every mapper in an assembly, apply `[UseStaticMapper]` at the assembly level in any file:
+
+```csharp
+[assembly: UseStaticMapper(typeof(BananaMapper))]
+[assembly: UseStaticMapper(typeof(AppleMapper))]
+```
+
+This makes the static mapping methods of the specified types available to all mappers in the assembly without needing to annotate each mapper individually.
+
+## External method references
+
+You can also reference individual methods from external classes directly on a mapping attribute using the `Use` property.
+
+### Static external method reference
+
+Prefix the method path with `@` to use Mapperly's full `nameof` syntax (which resolves nested member paths), or provide a fully qualified string path:
+
+<Tabs>
+  <Tab title="Full nameof (@)">
+    ```csharp
+    using OtherNamespace;
+
+    namespace MyNamespace;
+
+    [Mapper]
+    public partial class CarMapper
+    {
+        [MapProperty(nameof(Car.Price), nameof(CarDto.Price), Use = nameof(@PriceMapper.MapPrice))]
+        [MapPropertyFromSource(nameof(CarDto.NetPrice), Use = nameof(@PriceMapper.MapPriceFromSource))]
+        [MapValue(nameof(CarDto.SourceSystem), Use = nameof(@SourceSystems.GetSourceSystem))]
+        public partial CarDto MapCar(Car source);
+
+        // generates:
+        // target.Price = global::OtherNamespace.PriceMapper.MapPrice(source.Price);
+        // target.NetPrice = global::OtherNamespace.PriceMapper.MapPriceFromSource(source);
+        // target.SourceSystem = global::OtherNamespace.SourceSystems.GetSourceSystem();
+    }
+    ```
+  </Tab>
+  <Tab title="String path">
+    ```csharp
+    namespace MyNamespace;
+
+    [Mapper]
+    public partial class CarMapper
+    {
+        [MapProperty(nameof(Car.Price), nameof(CarDto.Price), Use = "OtherNamespace.PriceMapper.MapPrice")]
+        [MapPropertyFromSource(nameof(CarDto.NetPrice), Use = "OtherNamespace.PriceMapper.MapPriceFromSource")]
+        [MapValue(nameof(CarDto.SourceSystem), Use = "OtherNamespace.SourceSystems.GetSourceSystem")]
+        public partial CarDto MapCar(Car source);
+    }
+    ```
+  </Tab>
+  <Tab title="External class">
+    ```csharp
+    namespace OtherNamespace;
+
+    public static class PriceMapper
+    {
+        public static string MapPrice(decimal price)
+            => (price / 100).ToString("C");
+
+        public static string MapPriceFromSource(Car source)
+            => (source.Price / 100).ToString("C");
+    }
+
+    public static class SourceSystems
+    {
+        public static string GetSourceSystem() => "C1";
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Instance external method reference
+
+If the mapper class has a field or property referencing the external type, you can reference instance methods through that member:
+
+<Tabs>
+  <Tab title="Full nameof (@)">
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        public PriceMapper PriceMapper { get; } = new();
+        public SourceSystems SourceSystems { get; } = new();
+
+        [MapProperty(nameof(Car.Price), nameof(CarDto.Price), Use = nameof(@PriceMapper.MapPrice))]
+        [MapPropertyFromSource(nameof(CarDto.NetPrice), Use = nameof(@PriceMapper.MapPriceFromSource))]
+        [MapValue(nameof(CarDto.SourceSystem), Use = nameof(@SourceSystems.GetSourceSystem))]
+        public partial CarDto MapCar(Car source);
+
+        // generates:
+        // target.Price = PriceMapper.MapPrice(source.Price);
+        // target.NetPrice = PriceMapper.MapPriceFromSource(source);
+        // target.SourceSystem = SourceSystems.GetSourceSystem();
+    }
+    ```
+  </Tab>
+  <Tab title="String path">
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        public PriceMapper PriceMapper { get; } = new();
+        public SourceSystems SourceSystems { get; } = new();
+
+        [MapProperty(nameof(Car.Price), nameof(CarDto.Price), Use = "PriceMapper.MapPrice")]
+        [MapPropertyFromSource(nameof(CarDto.NetPrice), Use = "PriceMapper.MapPriceFromSource")]
+        [MapValue(nameof(CarDto.SourceSystem), Use = "SourceSystems.GetSourceSystem")]
+        public partial CarDto MapCar(Car source);
+    }
+    ```
+  </Tab>
+  <Tab title="External class">
+    ```csharp
+    public class PriceMapper
+    {
+        public string MapPrice(decimal price)
+            => (price / 100).ToString("C");
+
+        public string MapPriceFromSource(Car source)
+            => (source.Price / 100).ToString("C");
+    }
+
+    public static class SourceSystems
+    {
+        public static string GetSourceSystem() => "C1";
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Named mappings
+
+The `[NamedMapping]` attribute lets you give an external method an alternative name for use in `Use` references:
+
+```csharp
+namespace MyNamespace;
+
+[Mapper]
+public partial class CarMapper
+{
+    [MapProperty(nameof(Car.Price), nameof(CarDto.Price), Use = "PriceMapper.CustomMapPrice")]
+    [MapValue(nameof(CarDto.SourceSystem), Use = "OtherNamespace.SourceSystems.CustomGetSourceSystem")]
+    public partial CarDto Map(Car car);
+}
+```
+
+```csharp
+namespace OtherNamespace;
+
+public static class SourceSystems
+{
+    [NamedMapping("CustomGetSourceSystem")]
+    public static string GetSourceSystem() => "C1";
+}
+```
+
+## Reusing mapping configurations
+
+To share property mapping configurations (such as `[MapProperty]` and `[MapperIgnoreSource]`) across mappers, use `[IncludeMappingConfiguration]`. You can reference methods in external classes using the `@` prefix or a fully qualified string:
+
+<Tabs>
+  <Tab title="External type reference">
+    ```csharp
+    using OtherNamespace;
+
+    namespace MyNamespace;
+
+    [Mapper]
+    public partial class FruitMapper
+    {
+        [IncludeMappingConfiguration(nameof(@OtherMapper.CopyApple))]
+        public partial AppleDto ToApple(Apple apple);
+    }
+    ```
+
+    ```csharp
+    namespace OtherNamespace;
+
+    public static class OtherMapper
+    {
+        [MapProperty("Weight", "WeightInGrams")]
+        public partial void CopyApple(AppleDto dto, Apple apple);
+    }
+    ```
+  </Tab>
+  <Tab title="Field/property reference">
+    ```csharp
+    [Mapper]
+    public partial class FruitMapper
+    {
+        private readonly OtherMapper _otherMapper = new();
+
+        [IncludeMappingConfiguration(nameof(@_otherMapper.CopyApple))]
+        public partial AppleDto ToApple(Apple apple);
+    }
+    ```
+  </Tab>
+  <Tab title="String path">
+    ```csharp
+    [Mapper]
+    public partial class FruitMapper
+    {
+        [IncludeMappingConfiguration("OtherNamespace.OtherMapper.CopyApple")]
+        public partial AppleDto ToApple(Apple apple);
+    }
+    ```
+  </Tab>
+</Tabs>

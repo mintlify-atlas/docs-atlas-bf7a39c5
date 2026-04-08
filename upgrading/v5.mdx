@@ -1,0 +1,275 @@
+---
+title: "Upgrading to v5"
+description: "Migration guide for upgrading from Mapperly v4.3.1 to v5.0."
+---
+
+Mapperly v5.0 makes explicit casts opt-in, fixes `fullnameof` behavior for three-segment paths, changes `Stack<T>` cloning order, revises null guard generation for nullable constructor parameters, corrects constructor selection priority, and expands inaccessible member discovery from other assemblies.
+
+## Migration steps
+
+<Steps>
+  <Step title="Audit explicit cast usages">
+    Explicit casts are no longer included in the default enabled conversions. Run a build and check for new `RMG` diagnostics on mappings that previously relied on implicit narrowing conversions (for example, `long` → `int` or `double` → `float`).
+
+    Pick one of the three remediation strategies described in [Default enabled conversions exclude explicit casts](#default-enabled-conversions-exclude-explicit-casts).
+  </Step>
+  <Step title="Audit three-segment fullnameof paths">
+    Search your codebase for `[MapProperty(nameof(…), …)]` calls where the first argument is a three-segment `nameof` expression (e.g., `nameof(Car.Make.Id)`). In v4 these resolved to the full path automatically; in v5 only the last segment is used unless the `@` prefix is added.
+
+    Add `@` before the type name to restore the previous behavior:
+
+    ```csharp
+    // Before (accidental fullnameof in v4)
+    [MapProperty(nameof(Car.Make.Id), nameof(CarDto.MakeId))]
+
+    // After (explicit fullnameof in v5)
+    [MapProperty(nameof(@Car.Make.Id), nameof(CarDto.MakeId))]
+    ```
+  </Step>
+  <Step title="Verify Stack<T> cloning order">
+    If your code relies on `Stack<T>` elements being reversed during deep cloning, set `StackCloningStrategy = StackCloningStrategy.ReverseOrder` to restore the previous behavior. Otherwise no action is needed — the new default preserves the original stack order.
+  </Step>
+  <Step title="Check nullable constructor parameter mappings">
+    Find mappings where a nullable source type is mapped to a target via a constructor that accepts the same nullable type. Mapperly no longer emits a null guard in this case. Verify the generated code is correct for your use case.
+  </Step>
+  <Step title="Check constructor selection for types with copy constructors">
+    If you have a type with both a copy constructor and a `[MapperConstructor]`-annotated constructor, or with `[MapProperty]` configurations, verify that the correct constructor is now selected. Diff the generated code to confirm.
+  </Step>
+  <Step title="Review inaccessible members from other assemblies">
+    If you use `IncludedMembers` or `IncludedConstructors` options to include non-public members, check whether any new members from other assemblies are now discovered. Add `[MapperIgnoreSource]` / `[MapperIgnoreTarget]` for members that should not be mapped.
+  </Step>
+  <Step title="Verify .NET version support">
+    Only .NET Framework 4.8 and .NET 8.0 or later are officially tested and supported. Earlier .NET versions may still work with a recent Roslyn compiler SDK, but are not guaranteed.
+  </Step>
+</Steps>
+
+## Breaking changes
+
+### Default enabled conversions exclude explicit casts
+
+<Warning>
+  The default value of `MapperAttribute.EnabledConversions` has changed from `MappingConversionType.All` to the new `MappingConversionType.Default`. `MappingConversionType.Default` excludes explicit casts, which can cause precision loss (for example, `long` → `int`, `double` → `int`). Mappings that relied on automatic explicit casts will now produce a diagnostic.
+</Warning>
+
+You have three remediation options:
+
+#### Option 1 — Implement manual mappings (recommended)
+
+Write an explicit conversion method and reference it with `[MapProperty(Use = …)]`. This forces you to handle potential data loss consciously.
+
+```csharp
+[Mapper]
+public partial class MyMapper
+{
+    [MapProperty(nameof(Source.Value), nameof(Target.Value), Use = nameof(MapLongToInt))]
+    public partial Target Map(Source source);
+
+    private int MapLongToInt(long value) => (int)value;
+}
+```
+
+#### Option 2 — Enable explicit casts selectively
+
+Add `MappingConversionType.ExplicitCast` to the enabled conversions on a per-mapper or global basis.
+
+```csharp Per mapper
+[Mapper(EnabledConversions = MappingConversionType.Default | MappingConversionType.ExplicitCast)]
+public partial class MyMapper
+{
+    // ...
+}
+```
+
+```csharp Globally via MapperDefaults
+[assembly: MapperDefaults(EnabledConversions = MappingConversionType.Default | MappingConversionType.ExplicitCast)]
+```
+
+#### Option 3 — Restore the previous behavior (quick fix)
+
+Set `EnabledConversions` to `MappingConversionType.All` to restore exact v4 behavior.
+
+```csharp Globally
+[assembly: MapperDefaults(EnabledConversions = MappingConversionType.All)]
+```
+
+```csharp Per mapper
+[Mapper(EnabledConversions = MappingConversionType.All)]
+public partial class MyMapper { }
+```
+
+---
+
+### `fullnameof` fix for three-segment paths
+
+<Warning>
+  In v4 and earlier, a three-segment `nameof` expression (e.g., `nameof(Car.Make.Id)`) inside `[MapProperty]` was accidentally treated as a `fullnameof` expression, producing the full dotted path. In v5 this bug is fixed: only the last segment is used unless the `@` prefix is applied.
+</Warning>
+
+| Expression | v4 result | v5 result |
+| --- | --- | --- |
+| `nameof(Car.Make.Id)` | `"Make.Id"` | `"Id"` |
+| `nameof(@Car.Make.Id)` | not applicable | `"Make.Id"` |
+
+**Before (v4 behavior was accidental):**
+
+```csharp
+[MapProperty(nameof(Car.Make.Id), nameof(CarDto.MakeId))]
+// Compiled to: [MapProperty("Make.Id", "MakeId")]
+```
+
+**After (v5 — explicit `@` prefix required):**
+
+```csharp
+// Without @ — uses only last segment
+[MapProperty(nameof(Car.Make.Id), nameof(CarDto.MakeId))]
+// Compiled to: [MapProperty("Id", "MakeId")]
+
+// With @ — uses full path
+[MapProperty(nameof(@Car.Make.Id), nameof(CarDto.MakeId))]
+// Compiled to: [MapProperty("Make.Id", "MakeId")]
+```
+
+Review all `[MapProperty]` calls in your codebase that pass a three-segment `nameof` expression and add `@` where the full dotted path is intended.
+
+---
+
+### `Stack<T>` deep cloning order
+
+<Warning>
+  When deep cloning a `Stack<T>`, Mapperly v5 now preserves the original element order. In v4 and earlier, the order was reversed because Mapperly used the `Stack<T>(IEnumerable<T>)` constructor directly, which reverses the stack.
+</Warning>
+
+If your code depends on the previous (reversed) behavior, restore it with `StackCloningStrategy.ReverseOrder`:
+
+```csharp Assembly-wide
+[assembly: MapperDefaults(StackCloningStrategy = StackCloningStrategy.ReverseOrder)]
+```
+
+```csharp Per mapper
+[Mapper(UseDeepCloning = true, StackCloningStrategy = StackCloningStrategy.ReverseOrder)]
+public partial class MyMapper
+{
+    // ...
+}
+```
+
+---
+
+### Constructor mappings with nullable source skip null guard
+
+<Warning>
+  When mapping a nullable source type to a target that is constructed via a single-parameter constructor, Mapperly no longer generates a null guard if the constructor parameter itself accepts the nullable type. Code that relied on `ArgumentNullException` being thrown by the generated mapper will no longer throw.
+</Warning>
+
+| | Before (v4) | After (v5) |
+| --- | --- | --- |
+| Constructor accepts `int[]?` | Null guard + `throw ArgumentNullException` | Value passed directly |
+
+**Before:**
+
+```csharp
+public record Dto(int[]? Array);
+
+// Generated:
+public partial Dto Map(int[]? source)
+{
+    return source == null ? throw new ArgumentNullException(nameof(source)) : new Dto(source);
+}
+```
+
+**After:**
+
+```csharp
+// Generated:
+public partial Dto Map(int[]? source)
+{
+    return new Dto(source);
+}
+```
+
+If you require null checks, implement a manual mapping or add a guard in your own code before calling the mapper.
+
+---
+
+### Constructor selection respects `[MapperConstructor]` and `[MapProperty]`
+
+<Warning>
+  In v4 and earlier, a copy constructor (a single-parameter constructor accepting the same type) was always preferred, even when `[MapperConstructor]` was applied to a different constructor or when `[MapProperty]` configurations were present. This caused `[MapperConstructor]` and `[MapProperty(Use = …)]` annotations to be silently ignored. Starting with v5, the copy constructor is skipped in those cases.
+</Warning>
+
+**Before (v4 — copy constructor used, `[MapperConstructor]` ignored):**
+
+```csharp
+public class Document
+{
+    [MapperConstructor]
+    public Document() { }
+
+    public Document(Document other) { Title = other.Title; }
+
+    public string Title { get; init; }
+}
+
+// Generated (copy constructor was selected):
+public partial Document Clone(Document source)
+{
+    return new Document(source);
+}
+```
+
+**After (v5 — `[MapperConstructor]` respected):**
+
+```csharp
+// Generated (parameterless constructor is selected):
+public partial Document Clone(Document source)
+{
+    var target = new Document()
+    {
+        Title = source.Title,
+    };
+    return target;
+}
+```
+
+Diff the generated code for any mapper that deep-clones types with copy constructors to verify the correct constructor is now selected.
+
+---
+
+### Inaccessible members from other assemblies included
+
+<Warning>
+  Previously, private, protected, or internal members from other assemblies were always ignored, even if `IncludedMembers` or `IncludedConstructors` were configured to include them. Starting with v5, these members participate in the mapping process when the configuration allows it. This may produce new compilation errors for newly discovered members that Mapperly cannot map.
+</Warning>
+
+To restore the previous behavior, ignore the newly discovered members explicitly:
+
+```csharp
+[MapperIgnoreSource(nameof(ExternalType.InternalField))]
+public partial ExternalDto Map(ExternalType source);
+```
+
+See the [member visibility configuration](/configuration/mapper#member-visibility) in the mapper configuration docs for full details.
+
+---
+
+### `IFormatProvider` overloads respected in `Parse` mappings
+
+<Warning>
+  Mapperly now prefers `Parse` overloads that accept an `IFormatProvider` when mapping using parse methods. If your types expose both a plain `Parse(string)` and a `Parse(string, IFormatProvider)` overload, Mapperly will now select the overload with `IFormatProvider`. This may change the parsing behavior for culture-sensitive types.
+</Warning>
+
+If you need the culture-invariant overload, implement a manual mapping method.
+
+---
+
+### `MaybeNull` attributes respected for fields, properties, and constructor parameters
+
+Mapperly now reads `[MaybeNull]` attributes on fields, properties, and constructor parameters when determining nullability. This may change whether a null check is generated for a given member. Review mappings involving `[MaybeNull]`-annotated members after upgrading.
+
+---
+
+### .NET version support
+
+<Warning>
+  Only .NET Framework 4.8 and .NET 8.0 or later are officially supported and tested. Earlier .NET versions (such as .NET 6 or .NET 7) may still work when paired with a recent Roslyn compiler SDK, but are no longer covered by the test suite.
+</Warning>

@@ -1,0 +1,90 @@
+---
+title: "Reference handling"
+description: "Handle circular references and object graph cycles in your mappings."
+keywords: ["reference handling", "circular references", "object cycles", "IReferenceHandler", "UseReferenceHandling"]
+---
+
+By default, Mapperly does not track object references. If your object graph contains circular references or shared object instances, you need to enable reference handling to avoid infinite loops and ensure consistent output.
+
+## Enabling reference handling
+
+Set `UseReferenceHandling = true` on the `[Mapper]` attribute:
+
+```csharp
+[Mapper(UseReferenceHandling = true)]
+public partial class CarMapper
+{
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+This enables a default reference handler (`PreserveReferenceHandler`) that returns the same target object instance whenever it encounters the same source object instance during a mapping.
+
+<Warning>
+  When using reference handling, the Mapperly package reference must include runtime assets. Make sure `ExcludeAssets` on the `PackageReference` does **not** include `runtime`.
+
+  ```xml
+  <!-- Correct — runtime assets are included -->
+  <PackageReference Include="Riok.Mapperly" Version="x.x.x" />
+
+  <!-- Incorrect — runtime assets excluded, reference handling will not work -->
+  <PackageReference Include="Riok.Mapperly" Version="x.x.x" ExcludeAssets="runtime" />
+  ```
+</Warning>
+
+## Custom reference handler
+
+To use a custom `IReferenceHandler` implementation, add an `IReferenceHandler` parameter annotated with `[ReferenceHandler]` to the mapping method:
+
+```csharp
+[Mapper(UseReferenceHandling = true)]
+public partial class CarMapper
+{
+    public partial CarDto CarToCarDto(Car car, [ReferenceHandler] IReferenceHandler refHandler);
+}
+```
+
+Mapperly will pass the provided `IReferenceHandler` instance through all nested mapping calls.
+
+### Implementing IReferenceHandler
+
+`IReferenceHandler` has two methods:
+
+```csharp
+public interface IReferenceHandler
+{
+    // Called before creating a new target object.
+    // Return true and set target to reuse an existing instance.
+    // Return false to let Mapperly create a new instance.
+    bool TryGetReference<TSource, TTarget>(TSource source, out TTarget? target)
+        where TSource : notnull
+        where TTarget : notnull;
+
+    // Called after Mapperly creates a new target object instance.
+    void SetReference<TSource, TTarget>(TSource source, TTarget target)
+        where TSource : notnull
+        where TTarget : notnull;
+}
+```
+
+## User-implemented mappings with reference handling
+
+To access the `IReferenceHandler` in a user-implemented mapping method, add a `[ReferenceHandler]`-annotated parameter the same way:
+
+```csharp
+[Mapper(UseReferenceHandling = true)]
+public partial class CarMapper
+{
+    public partial CarDto CarToCarDto(Car car, [ReferenceHandler] IReferenceHandler refHandler);
+
+    private EngineDto MapEngine(Engine engine, [ReferenceHandler] IReferenceHandler refHandler)
+    {
+        // custom mapping logic using refHandler...
+        return new EngineDto { Horsepower = engine.Horsepower };
+    }
+}
+```
+
+<Note>
+  Reference handling is not supported in [IQueryable projections](/configuration/queryable-projections) because those mappings use expression trees, which cannot track object references at runtime.
+</Note>

@@ -1,0 +1,118 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Mapperly",
+  "projectDescription": "A .NET source generator that generates fast, readable object mapping code at build time with no runtime reflection.",
+  "theme": "luma",
+  "primaryColor": "#3B6CDB",
+  "lightColor": "#EEF3FF",
+  "darkColor": "#1A3A8C",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "getting-started/installation",
+              "getting-started/first-mapper"
+            ]
+          },
+          {
+            "group": "Mapping Configuration",
+            "pages": [
+              "configuration/mapper",
+              "configuration/properties",
+              "configuration/enum",
+              "configuration/conversions",
+              "configuration/collections"
+            ]
+          },
+          {
+            "group": "Advanced Features",
+            "pages": [
+              "configuration/queryable-projections",
+              "configuration/external-mappings",
+              "configuration/user-implemented-methods",
+              "configuration/reference-handling",
+              "configuration/generic-mapping",
+              "configuration/static-mappers"
+            ]
+          },
+          {
+            "group": "Upgrading",
+            "pages": [
+              "upgrading/v3",
+              "upgrading/v4",
+              "upgrading/v5"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/index",
+              "contributing/architecture",
+              "contributing/common-tasks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Attributes",
+            "pages": [
+              "api/mapper-attribute",
+              "api/map-property-attribute",
+              "api/map-enum-attribute",
+              "api/ignore-attributes",
+              "api/object-factory-attribute"
+            ]
+          },
+          {
+            "group": "Enums & Strategies",
+            "pages": [
+              "api/enum-mapping-strategy",
+              "api/mapping-conversion-type",
+              "api/required-mapping-strategy"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Build-time code generation via Roslyn source generators — zero runtime overhead",
+    "No runtime reflection — fully trimming-safe and AOT-compatible",
+    "Readable, debuggable generated mapping code",
+    "Rich attribute-based configuration for properties, enums, collections, and more",
+    "IQueryable<T> projection support for ORM query optimization",
+    "Circular reference handling with configurable reference handlers",
+    "Flattening and unflattening of nested object hierarchies",
+    "External mapper composition via UseMapper / UseStaticMapper",
+    "Strict mapping diagnostics to catch unmapped members at compile time"
+  ],
+  "publicApiSurface": [
+    "[Mapper] — MapperAttribute: marks a partial class as a Mapperly mapper",
+    "[MapperDefaults] — MapperDefaultsAttribute: assembly-level default configuration",
+    "[MapProperty] — MapPropertyAttribute: rename or configure individual property mappings",
+    "[MapPropertyFromSource] — maps the source object to a target property",
+    "[MapEnum] — MapEnumAttribute: configure enum mapping strategy per method",
+    "[MapEnumValue] — MapEnumValueAttribute: explicit enum value mappings",
+    "[MapperIgnoreTarget] / [MapperIgnoreSource]: ignore specific properties",
+    "[MapperIgnoreSourceValue] / [MapperIgnoreTargetValue]: ignore enum values",
+    "[MapperIgnoreObsoleteMembers]: skip obsolete members",
+    "[MapperRequiredMapping]: enforce required mapping strategy per method",
+    "[MapNestedProperties]: flatten nested property members into scope",
+    "[ObjectFactory]: custom object factory methods",
+    "[FormatProvider]: custom format provider for string conversions",
+    "[UseMapper] / [UseStaticMapper]: compose external mappers",
+    "[UserMapping]: mark user-implemented methods for auto-discovery",
+    "[NamedMapping]: assign custom name to a mapping method",
+    "[MappingTarget]: specify existing target object parameter",
+    "[IncludeMappingConfiguration]: reuse mapping configurations",
+    "IReferenceHandler — interface for custom reference handling"
+  ]
+}

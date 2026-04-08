@@ -1,0 +1,109 @@
+---
+title: "Contributing to Mapperly"
+description: "How to get started contributing code, docs, or feedback to Mapperly."
+keywords: ["contributing", "open source", "pull request", "bug report", "feature request"]
+---
+
+We would love for you to contribute to Mapperly and help make it even better. As a contributor, here are the guidelines we would like you to follow.
+
+## Code of conduct
+
+Help us keep Mapperly open and inclusive. Please read and follow the [code of conduct](https://github.com/riok/mapperly/blob/main/CODE_OF_CONDUCT.md).
+
+## Questions and discussions
+
+If you have a question or a problem, create a new [GitHub Discussion](https://github.com/riok/mapperly/discussions/new/choose).
+
+## Reporting a bug
+
+If you find a bug in the source code, [submit a GitHub Issue](https://github.com/riok/mapperly/issues/new). Even better, submit a pull request with a fix.
+
+Before you submit an issue, search the issue tracker and discussions — an existing issue or discussion may already cover your problem and describe available workarounds.
+
+## Requesting a feature
+
+You can request a new feature by [submitting a GitHub Issue](https://github.com/riok/mapperly/issues/new). If you would like to implement a new feature yourself, consider the size of the change to determine the right steps:
+
+- **Major feature** — first open an issue and outline your proposal so it can be discussed. Getting early feedback helps ensure your implementation will be accepted. Adding a new documentation topic or significantly rewriting existing docs also counts as a major feature.
+- **Small feature** — craft your change and submit it directly as a pull request.
+
+## Contribution workflow
+
+Before you submit a pull request, search [GitHub](https://github.com/riok/mapperly/pulls) for an open or closed PR that relates to your submission. You don't want to duplicate existing efforts.
+
+<Steps>
+  <Step title="Fork and branch">
+    [Fork](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo) the `riok/mapperly` repository. In your fork, create a new branch from `main`:
+
+    ```shell
+    git checkout -b my-fix-branch main
+    ```
+  </Step>
+  <Step title="Make your changes">
+    Create your patch, including appropriate [test cases](/contributing/common-tasks#writing-and-running-tests) and [documentation updates](/contributing/common-tasks#updating-documentation).
+
+    Read the [architecture overview](/contributing/architecture) to understand how Mapperly works before making significant changes.
+  </Step>
+  <Step title="Commit">
+    Commit your changes using a descriptive commit message. Release notes are automatically generated from commit messages, so clear messages matter.
+
+    ```shell
+    git commit --all
+    ```
+
+    [Husky](https://alirezanet.github.io/Husky.Net/) and [CSharpier](https://csharpier.com/) automatically format changed files on commit.
+  </Step>
+  <Step title="Rebase if needed">
+    If any commits have been made to the upstream `main` branch, rebase your branch so the merge will be a clean fast-forward:
+
+    ```shell
+    git checkout main
+    git pull upstream main
+    git checkout my-fix-branch
+    git rebase main
+    ```
+
+    You can also squash smaller commits into larger, more cohesive ones with an interactive rebase:
+
+    ```bash
+    git rebase -i main
+    ```
+  </Step>
+  <Step title="Push and open a PR">
+    Push your branch to GitHub:
+
+    ```shell
+    git push origin my-fix-branch
+    ```
+
+    Then open a pull request to `riok:main` and request a review from a maintainer.
+  </Step>
+</Steps>
+
+### CI checks
+
+Once you submit a pull request, all continuous integration checks are triggered. If a check fails, review the job output logs for details. It could be a problem with the PR or a failing test case.
+
+### Incorporating review feedback
+
+The maintainers will review your changes and provide feedback. Follow the [GitHub guide](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/incorporating-feedback-in-your-pull-request) to incorporate feedback into your pull request.
+
+## Coding standards
+
+Code formatting is enforced automatically:
+
+- **[CSharpier](https://csharpier.com/)** formats C# code on commit via a Git hook. Run it manually with `dotnet csharpier format .`
+- **dotnet format** enforces style and analyzer rules. Run `dotnet format style` and `dotnet format analyzers` to fix issues locally.
+
+See [Common tasks](/contributing/common-tasks) for full linting commands.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/contributing/architecture">
+    Understand how Mapperly's source generator pipeline works internally.
+  </Card>
+  <Card title="Common tasks" icon="list-check" href="/contributing/common-tasks">
+    Step-by-step guides for adding features, writing tests, debugging, and more.
+  </Card>
+</CardGroup>

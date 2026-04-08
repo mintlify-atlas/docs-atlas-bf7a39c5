@@ -1,0 +1,113 @@
+---
+title: "Upgrading to v3"
+description: "Migration guide for upgrading from Mapperly v2.8.0 to v3.0."
+---
+
+Mapperly v3.0 introduces three breaking changes: removal of `MapperIgnoreAttribute`, expanded member accessibility, and sealed attributes. Most projects can migrate in a few minutes.
+
+## Migration steps
+
+<Steps>
+  <Step title="Replace MapperIgnoreAttribute">
+    Find every use of `[MapperIgnore]` and replace it with `[MapperIgnoreTarget]`.
+
+    ```csharp Before
+    [MapperIgnore(nameof(CarDto.InternalCode))]
+    public partial CarDto CarToCarDto(Car car);
+    ```
+
+    ```csharp After
+    [MapperIgnoreTarget(nameof(CarDto.InternalCode))]
+    public partial CarDto CarToCarDto(Car car);
+    ```
+  </Step>
+  <Step title="Handle newly accessible members">
+    Review whether any private or internal members have been pulled into your mappings. Add `[MapperIgnoreSource]` or `[MapperIgnoreTarget]` for any members that should not be mapped.
+
+    ```csharp
+    [MapperIgnoreSource(nameof(Car.InternalId))]
+    [MapperIgnoreTarget(nameof(CarDto.InternalCode))]
+    public partial CarDto CarToCarDto(Car car);
+    ```
+  </Step>
+</Steps>
+
+## Breaking changes
+
+### `MapperIgnoreAttribute` was removed
+
+<Warning>
+  `MapperIgnoreAttribute` has been removed. You must replace all usages with `MapperIgnoreTargetAttribute`.
+</Warning>
+
+The `MapperIgnoreAttribute` targeted a single member on the destination type. Its replacement, `MapperIgnoreTargetAttribute`, carries the same semantics under a more precise name. A complementary `MapperIgnoreSourceAttribute` also exists for ignoring source members.
+
+| Old | New |
+| --- | --- |
+| `[MapperIgnore(nameof(Dest.Foo))]` | `[MapperIgnoreTarget(nameof(Dest.Foo))]` |
+
+```csharp Before
+[Mapper]
+public partial class CarMapper
+{
+    [MapperIgnore(nameof(CarDto.InternalCode))]
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+```csharp After
+[Mapper]
+public partial class CarMapper
+{
+    [MapperIgnoreTarget(nameof(CarDto.InternalCode))]
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+---
+
+### All accessible members are mapped by default
+
+<Warning>
+  Mapperly now maps every member the mapper can access, including private and internal members. This may cause new mapping attempts — or new diagnostics — on members that were previously ignored.
+</Warning>
+
+Before v3.0, Mapperly considered only members that were public or internal within the same assembly as the mapper. Starting with v3.0, Mapperly considers every member that the mapper can structurally access:
+
+- **Private members** of a class that is being mapped by a mapper declared as a nested class inside it.
+- **Internal members** of a type in another assembly that has `[assembly: InternalsVisibleTo("…")]` pointing at the mapper's assembly.
+
+If any of these newly visible members should not be mapped, suppress them explicitly:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    // Ignore a source member that became visible via InternalsVisibleTo
+    [MapperIgnoreSource(nameof(Car.InternalTrackingId))]
+    // Ignore a target member that became visible because the mapper is a nested class
+    [MapperIgnoreTarget(nameof(CarDto.InternalCode))]
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+---
+
+### Sealed attributes
+
+<Warning>
+  All attributes in `Riok.Mapperly.Abstractions` are now `sealed`. Any custom attribute classes that inherit from a Mapperly attribute will no longer compile.
+</Warning>
+
+If you have derived from any Mapperly attribute, remove the inheritance. There is no direct replacement; configure your mappings using the standard attributes directly.
+
+```csharp Before — no longer compiles
+// Inheriting a Mapperly attribute is no longer allowed
+public class MyCustomMapperAttribute : MapperAttribute { }
+```
+
+```csharp After
+// Use the standard attribute directly
+[Mapper]
+public partial class MyMapper { }
+```

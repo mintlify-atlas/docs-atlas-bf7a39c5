@@ -1,0 +1,126 @@
+---
+title: "Collection mappings"
+description: "How Mapperly handles arrays, lists, dictionaries, spans, and other collection types."
+keywords: ["collections", "IEnumerable", "List", "array", "dictionary", "Span", "Memory", "Tuple", "deep cloning"]
+---
+
+Mapperly automatically maps common collection types. For each element pair, Mapperly applies the same mapping logic it would use for a standalone mapping of that element type.
+
+## Enumerable types
+
+Mapperly handles any source type that implements `IEnumerable<T>`. Common target types are automatically chosen:
+
+| Target type                          | How Mapperly creates it             |
+| ------------------------------------ | ----------------------------------- |
+| `T[]`                                | `ToArray()`                         |
+| `List<T>` / `IList<T>`              | `ToList()`                          |
+| `ICollection<T>`                     | `ToList()`                          |
+| `IEnumerable<T>`                     | `Select(...)` / `ToList()`          |
+| `IReadOnlyCollection<T>`             | `ToList()`                          |
+| `IReadOnlyList<T>`                   | `ToList()`                          |
+| `ImmutableArray<T>`                  | `ToImmutableArray()`                |
+| `HashSet<T>` / `ISet<T>`             | `ToHashSet()`                       |
+| `Stack<T>` / `Queue<T>`              | Constructed via constructor         |
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial IEnumerable<CarDto> MapAll(IEnumerable<Car> cars);
+    public partial List<CarDto> MapToList(IEnumerable<Car> cars);
+    public partial CarDto[] MapToArray(IEnumerable<Car> cars);
+}
+```
+
+## Dictionary mapping
+
+Mapperly maps `IDictionary<TKey, TValue>` and `IReadOnlyDictionary<TKey, TValue>` by mapping each key and value individually:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial Dictionary<string, CarDto> MapDictionary(IDictionary<string, Car> source);
+    public partial IReadOnlyDictionary<string, CarDto> MapReadOnly(IReadOnlyDictionary<string, Car> source);
+}
+```
+
+## Span and ReadOnlySpan
+
+Mapperly can map to and from `Span<T>` and `ReadOnlySpan<T>`, including conversions between spans and enumerables:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial CarDto[] MapFromSpan(ReadOnlySpan<Car> source);
+    public partial Span<CarDto> MapToSpan(Car[] source);
+}
+```
+
+<Note>
+  Span mappings are only available in non-async, non-queryable contexts, as `Span<T>` cannot be stored on the heap.
+</Note>
+
+## Memory and ReadOnlyMemory
+
+`Memory<T>` and `ReadOnlyMemory<T>` are supported for scenarios where heap-allocated span-like types are needed. Mapperly can convert between memory types, span types, and enumerables:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial Memory<CarDto> MapToMemory(IEnumerable<Car> source);
+    public partial ReadOnlyMemory<CarDto> MapToReadOnlyMemory(Car[] source);
+}
+```
+
+## Tuple and ValueTuple
+
+Mapperly supports mapping to `ValueTuple<>` and tuple expressions. Mapping is done positionally and by element name:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial (string Name, int Seats) MapToTuple(Car car);
+    public partial ValueTuple<string, int> MapToValueTuple(Car car);
+}
+```
+
+<Note>
+  In `IQueryable<T>` projections, only `ValueTuple<>` is supported (not tuple expressions).
+</Note>
+
+## Deep cloning for collections
+
+By default, Mapperly reuses compatible collection instances directly. To always produce new instances with cloned elements, set `UseDeepCloning = true` on the mapper:
+
+```csharp
+[Mapper(UseDeepCloning = true)]
+public partial class CarMapper
+{
+    // Both the list and each Car element will be cloned
+    public partial List<Car> Clone(List<Car> cars);
+}
+```
+
+When deep cloning a `Stack<T>`, element order is preserved by default. Use `StackCloningStrategy` to change this:
+
+```csharp
+[Mapper(UseDeepCloning = true, StackCloningStrategy = StackCloningStrategy.ReverseOrder)]
+public partial class CarMapper
+{
+    public partial Stack<Car> CloneStack(Stack<Car> source);
+}
+```
+
+See [Mapper configuration](/configuration/mapper#deep-cloning) for details.
+
+## IQueryable projections
+
+`IQueryable<T>` sources are handled separately as expression-tree projections, which allows them to be translated by an ORM into efficient SQL queries. See [Queryable projections](/configuration/queryable-projections) for details.
+
+<Note>
+  Deep cloning and span mappings do not apply to `IQueryable<T>` projections.
+</Note>

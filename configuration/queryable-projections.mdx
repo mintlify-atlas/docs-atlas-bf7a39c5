@@ -1,0 +1,143 @@
+---
+title: "IQueryable projections"
+description: "Use Mapperly with IQueryable<T> for efficient ORM queries and expression trees."
+keywords: ["queryable", "projection", "IQueryable", "Entity Framework", "EF Core", "expression tree", "ORM"]
+---
+
+Mapperly supports `IQueryable<T>` projection mappings. This is useful with Entity Framework and other ORM solutions that expose `IQueryable<T>` — only the fields present in the target class are retrieved from the database.
+
+<Tabs>
+  <Tab title="Mapper definition">
+    ```csharp
+    [Mapper]
+    public static partial class CarMapper
+    {
+        public static partial IQueryable<CarDto> ProjectToDto(this IQueryable<Car> q);
+    }
+    ```
+  </Tab>
+  <Tab title="Usage">
+    ```csharp
+    var dtos = await DbContext.Cars
+        .Where(...)
+        .ProjectToDto()
+        .ToListAsync();
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  Queryable projection mappings use `System.Linq.Expressions.Expression<T>` under the hood and have several limitations:
+
+  - Object factories are not applied
+  - Constructors with unmatched optional parameters are ignored
+  - `ThrowOnPropertyMappingNullMismatch` is ignored
+  - `AllowNullPropertyAssignment` is ignored
+  - Enum mappings do not support the `ByName` strategy
+  - Reference handling is not supported
+  - Nullable reference types are disabled
+  - Deep cloning is not applied
+</Info>
+
+## Property configurations
+
+To configure property mappings in a queryable projection, add partial mapping method definitions with attributes. Set these methods to `private` to hide them from callers.
+
+```csharp
+[Mapper]
+public static partial class CarMapper
+{
+    public static partial IQueryable<CarDto> ProjectToDto(this IQueryable<Car> q);
+
+    [MapProperty(nameof(Car.Manufacturer), nameof(CarDto.Producer))]
+    private static partial CarDto Map(Car car);
+}
+```
+
+## User-implemented mapping methods
+
+Mapperly tries to inline user-implemented mapping methods into the generated expression tree. For inlining to work, the method must satisfy these requirements:
+
+- Only expression-bodied methods, or methods consisting of a single local variable declaration, can be inlined.
+- The body must follow the [expression tree limitations](https://learn.microsoft.com/en-us/dotnet/csharp/advanced-topics/expression-trees/#limitations).
+- Nested method groups cannot be inlined.
+
+```csharp
+[Mapper]
+public static partial class CarMapper
+{
+    public static partial IQueryable<CarDto> ProjectToDto(this IQueryable<Car> q);
+
+    private static string MapCarBrandName(CarBrand brand)
+        => brand.Name;
+}
+```
+
+<Warning>
+  If Mapperly cannot inline a user-implemented method, diagnostic `RMG068` is reported. Non-inlined method invocations can cause more data to be loaded from the database than necessary.
+</Warning>
+
+You can also order and aggregate collections using user-implemented mapping methods:
+
+```csharp
+[Mapper]
+public static partial class CarMapper
+{
+    public static partial IQueryable<CarDto> ProjectToDto(this IQueryable<Car> q);
+
+    private static partial CarModelDto MapCarModel(CarModel model);
+
+    // Do not use the method group '.Select(MapCarModel)' — it cannot be inlined
+    private static ICollection<CarModelDto> MapOrderedCarModels(ICollection<CarModel> models)
+        => models.OrderBy(x => x.Name).Select(x => MapCarModel(x)).ToList();
+}
+```
+
+<Note>
+  The types in a user-implemented mapping method must match the types of the objects being mapped exactly. Otherwise Mapperly cannot resolve the method.
+</Note>
+
+## Expression mappings
+
+In addition to `IQueryable<T>` projections, Mapperly can generate `Expression<Func<TSource, TTarget>>` directly. This is useful when you need the expression tree itself — for example, to compose expressions manually or pass them to APIs that accept expressions.
+
+<Tabs>
+  <Tab title="Mapper definition">
+    ```csharp
+    [Mapper]
+    public static partial class CarMapper
+    {
+        public static partial Expression<Func<Car, CarDto>> ProjectToDto();
+    }
+    ```
+  </Tab>
+  <Tab title="Usage">
+    ```csharp
+    // Get the expression tree
+    var expression = CarMapper.ProjectToDto();
+
+    // Use with EF Core
+    var dtos = await DbContext.Cars
+        .Where(...)
+        .Select(expression)
+        .ToListAsync();
+    ```
+  </Tab>
+</Tabs>
+
+Expression mappings use the same expression tree building logic as `IQueryable<T>` projections, so they share the same [limitations](#iqueryablet-projections) and support property configurations and user-implemented mapping methods.
+
+### Property configurations
+
+Configure property mappings for expression mappings the same way as for `IQueryable<T>` projections:
+
+```csharp
+[Mapper]
+public static partial class CarMapper
+{
+    public static partial Expression<Func<Car, CarDto>> ProjectToDto();
+
+    [MapProperty(nameof(Car.Manufacturer), nameof(CarDto.Producer))]
+    private static partial CarDto Map(Car car);
+}
+```

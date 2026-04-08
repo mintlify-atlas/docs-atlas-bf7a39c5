@@ -1,0 +1,252 @@
+---
+title: "Ignore attributes"
+description: "Reference for all attributes that control which members are excluded from mapping."
+---
+
+Mapperly provides several attributes to exclude specific source members, target members, or enum values from mapping. Some attributes are applied to the type definition and some to individual mapping methods.
+
+---
+
+## MapperIgnoreAttribute
+
+Excludes a property, field, or method from all mappings, regardless of which mapping methods are present. Apply it directly to the member definition on the source or target type.
+
+```csharp
+public class Car
+{
+    [MapperIgnore]
+    public int InternalId { get; set; }
+
+    public string Model { get; set; }
+}
+```
+
+When applied to a method, prevents Mapperly from using that method as a conversion method (e.g., a `Parse` or `ToTarget` method that should not be picked up automatically):
+
+```csharp
+public class Money
+{
+    // Prevent Mapperly from using this Parse overload
+    [MapperIgnore]
+    public static Money Parse(string s) => new();
+
+    // This alternative is still considered
+    public static Money FromString(string s) => new();
+}
+```
+
+**Targets:** `Property`, `Field`, `Method`
+
+<Warning>
+  If `[MapperIgnore]` is applied to a member in a different assembly from the mapper, that assembly must preserve Mapperly attributes at runtime. See the installation guide for details.
+</Warning>
+
+---
+
+## MapperIgnoreTargetAttribute
+
+Ignores a specific target member for a single mapping method. Apply it to the mapping method, not to the type definition.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapperIgnoreTarget(nameof(CarDto.InternalId))]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+Multiple attributes can be stacked to ignore several members at once:
+
+```csharp
+[MapperIgnoreTarget(nameof(CarDto.InternalId))]
+[MapperIgnoreTarget(nameof(CarDto.AuditLog))]
+public partial CarDto ToDto(Car car);
+```
+
+**Targets:** `Method` (with `AllowMultiple = true`)
+
+### Parameters
+
+<ParamField path="target" type="string" required>
+  The name of the target property or field to ignore. Use `nameof()` for refactoring safety.
+</ParamField>
+
+---
+
+## MapperIgnoreSourceAttribute
+
+Ignores a specific source member for a single mapping method. Apply it to the mapping method.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapperIgnoreSource(nameof(Car.InternalId))]
+    [MapperIgnoreSource(nameof(Car.AuditTrail))]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+**Targets:** `Method` (with `AllowMultiple = true`)
+
+### Parameters
+
+<ParamField path="source" type="string" required>
+  The name of the source property or field to ignore. Use `nameof()` for refactoring safety.
+</ParamField>
+
+---
+
+## MapperIgnoreSourceValueAttribute
+
+Ignores a specific source enum value so it is not mapped to any target enum value. Apply it to an enum mapping method.
+
+When a source value is ignored, Mapperly will not emit a warning for it being unmapped (regardless of `RequiredMappingStrategy`).
+
+```csharp
+[Mapper]
+public partial class OrderMapper
+{
+    [MapperIgnoreSourceValue(SourceStatus.Legacy)]
+    public partial TargetStatus MapStatus(SourceStatus source);
+}
+```
+
+**Targets:** `Method` (with `AllowMultiple = true`)
+
+### Parameters
+
+<ParamField path="source" type="object" required>
+  The source enum value to ignore. Must be a valid member of the source enum type.
+</ParamField>
+
+---
+
+## MapperIgnoreTargetValueAttribute
+
+Ignores a specific target enum value so Mapperly does not require it to be mapped. Apply it to an enum mapping method.
+
+```csharp
+[Mapper]
+public partial class OrderMapper
+{
+    [MapperIgnoreTargetValue(TargetStatus.Deprecated)]
+    public partial TargetStatus MapStatus(SourceStatus source);
+}
+```
+
+**Targets:** `Method` (with `AllowMultiple = true`)
+
+### Parameters
+
+<ParamField path="target" type="object" required>
+  The target enum value to ignore. Must be a valid member of the target enum type.
+</ParamField>
+
+---
+
+## MapperIgnoreObsoleteMembersAttribute
+
+Overrides the `IgnoreObsoleteMembersStrategy` for a single mapping method. The mapper-level default is set on `[Mapper(IgnoreObsoleteMembersStrategy = ...)]`.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapperIgnoreObsoleteMembers(IgnoreObsoleteMembersStrategy.Both)]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+**Targets:** `Method`
+
+### Parameters
+
+<ParamField path="ignoreObsoleteStrategy" type="IgnoreObsoleteMembersStrategy" default="Both">
+  The strategy to use for this method.
+
+  | Value | Description |
+  |-------|-------------|
+  | `None` | Maps obsolete members normally |
+  | `Both` | Ignores both source and target obsolete members (default when using attribute) |
+  | `Source` | Ignores obsolete source members only |
+  | `Target` | Ignores obsolete target members only |
+</ParamField>
+
+<Note>
+  `[MapProperty]` always maps explicitly specified members, even when they are marked `[Obsolete]` and the strategy would otherwise ignore them.
+</Note>
+
+---
+
+## MapperRequiredMappingAttribute
+
+Overrides the `RequiredMappingStrategy` for a single mapping method, controlling when Mapperly emits warnings for unmapped members. The mapper-level default is set on `[Mapper(RequiredMappingStrategy = ...)]`.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    // Only warn when target members are unmapped; ignore unmapped source members
+    [MapperRequiredMapping(RequiredMappingStrategy.Target)]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+**Targets:** `Method`
+
+### Parameters
+
+<ParamField path="requiredMappingStrategy" type="RequiredMappingStrategy" required>
+  The strategy used when emitting warnings for unmapped members.
+
+  | Value | Description |
+  |-------|-------------|
+  | `None` | No warnings for unmapped source or target members |
+  | `Both` | Warn for unmapped source and target members |
+  | `Source` | Warn only for unmapped source members |
+  | `Target` | Warn only for unmapped target members |
+</ParamField>
+
+---
+
+## Examples
+
+### Ignore several target members on a method
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [MapperIgnoreTarget(nameof(CarDto.InternalId))]
+    [MapperIgnoreTarget(nameof(CarDto.LastModified))]
+    public partial CarDto ToDto(Car car);
+}
+```
+
+### Ignore an obsolete source property globally, allow it per method
+
+```csharp
+[Mapper(IgnoreObsoleteMembersStrategy = IgnoreObsoleteMembersStrategy.Source)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car); // obsolete source members skipped
+
+    [MapperIgnoreObsoleteMembers(IgnoreObsoleteMembersStrategy.None)]
+    public partial CarDto ToDtoWithObsolete(Car car); // obsolete members included
+}
+```
+
+### Suppress warnings for unmapped enum source values
+
+```csharp
+[Mapper]
+public partial class OrderMapper
+{
+    [MapEnum(EnumMappingStrategy.ByName)]
+    [MapperIgnoreSourceValue(SourceStatus.Draft)]
+    [MapperRequiredMapping(RequiredMappingStrategy.Target)]
+    public partial TargetStatus MapStatus(SourceStatus source);
+}
+```

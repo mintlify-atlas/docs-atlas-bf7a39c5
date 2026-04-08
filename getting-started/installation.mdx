@@ -1,0 +1,103 @@
+---
+title: "Installation"
+description: "How to install Mapperly in a .NET project."
+---
+
+## Requirements
+
+- .NET 8+ or .NET Framework 4.x
+- C# language version 9 or later
+- Roslyn 4.8 or later
+
+## Add the NuGet package
+
+Add a reference to [`Riok.Mapperly`](https://www.nuget.org/packages/Riok.Mapperly) in your project.
+
+<Tabs>
+  <Tab title="PackageReference">
+    Add the following to your `.csproj` file:
+
+    ```xml
+    <PackageReference Include="Riok.Mapperly" Version="x.y.z" ExcludeAssets="runtime" PrivateAssets="all" />
+    ```
+
+    Replace `x.y.z` with the latest version from [NuGet](https://www.nuget.org/packages/Riok.Mapperly).
+
+    <Note>
+      `ExcludeAssets="runtime"` and `PrivateAssets="all"` prevent Mapperly from being deployed as a runtime dependency. Because Mapperly is a source generator, it only needs to be present at build time.
+    </Note>
+  </Tab>
+  <Tab title=".NET CLI">
+    ```bash
+    dotnet add package Riok.Mapperly
+    ```
+
+    <Note>
+      After the package is added, open the resulting `PackageReference` entry in your `.csproj` and add `ExcludeAssets="runtime"` and `PrivateAssets="all"` to remove the runtime dependency:
+
+      ```xml
+      <PackageReference Include="Riok.Mapperly" Version="x.y.z" ExcludeAssets="runtime" PrivateAssets="all" />
+      ```
+    </Note>
+  </Tab>
+  <Tab title="Package Manager Console">
+    ```powershell
+    Install-Package Riok.Mapperly
+    ```
+
+    <Note>
+      After the package is added, open the resulting `PackageReference` entry in your `.csproj` and add `ExcludeAssets="runtime"` and `PrivateAssets="all"` to remove the runtime dependency:
+
+      ```xml
+      <PackageReference Include="Riok.Mapperly" Version="x.y.z" ExcludeAssets="runtime" PrivateAssets="all" />
+      ```
+    </Note>
+  </Tab>
+</Tabs>
+
+## Release channels
+
+Mapperly is distributed through two release channels:
+
+- **Stable channel** (`mapperly.riok.app`): Production-ready releases. Subject to semantic versioning — breaking changes only in major version bumps. Use this for production projects.
+- **Next channel** (`next.mapperly.riok.app`): Preview releases with upcoming features and improvements. Not subject to semantic versioning and may contain breaking changes. Use this for testing and early access to new features.
+
+<Warning>
+  Prerelease versions from the Next channel are not subject to semantic versioning. The API may break in any prerelease. For production use, always install from the stable channel.
+</Warning>
+
+## Support policy
+
+Only the latest version released on the stable channel is fully supported. Mapperly strives to support all .NET versions currently supported by Microsoft.
+
+## Preserving attributes at runtime
+
+By default, Mapperly removes attribute references at compile time using the `ConditionalAttribute`. If you need those attribute references to be preserved at runtime — for example, when using [reference handling](/configuration/reference-handling) — you can opt in.
+
+**Option 1: MSBuild property**
+
+Set `MapperlyAbstractionsScope` to `runtime` in your project file:
+
+```xml
+<PropertyGroup>
+  <MapperlyAbstractionsScope>runtime</MapperlyAbstractionsScope>
+</PropertyGroup>
+```
+
+<Note>
+  `MapperlyAbstractionsScope` only works in projects that reference `Riok.Mapperly` directly.
+</Note>
+
+**Option 2: Compiler constant**
+
+If you are not referencing `Riok.Mapperly` directly, define the `MAPPERLY_ABSTRACTIONS_SCOPE_RUNTIME` constant instead:
+
+```xml
+<PropertyGroup>
+  <DefineConstants>$(DefineConstants);MAPPERLY_ABSTRACTIONS_SCOPE_RUNTIME</DefineConstants>
+</PropertyGroup>
+```
+
+<Note>
+  When preserving attribute usages, make sure `ExcludeAssets` on the `PackageReference` does **not** include `runtime`. The runtime assets must be present for this to work.
+</Note>

@@ -1,0 +1,322 @@
+---
+title: "MapperAttribute"
+description: "Reference for the [Mapper] attribute and all its configuration properties."
+---
+
+## Overview
+
+Apply `[Mapper]` to a `partial` class to mark it as a Mapperly mapper. Mapperly generates the mapping implementation at compile time.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+`MapperAttribute` is defined in `Riok.Mapperly.Abstractions` and targets classes (`AttributeTargets.Class`).
+
+---
+
+## Properties
+
+<ParamField path="PropertyNameMappingStrategy" type="PropertyNameMappingStrategy" default="CaseSensitive">
+  Strategy used to match property and field names between source and target.
+
+  | Value | Description |
+  |-------|-------------|
+  | `CaseSensitive` | Matches names exactly (default) |
+  | `CaseInsensitive` | Ignores case differences |
+  | `SnakeCase` | Converts both sides to `snake_case` before comparison |
+  | `UpperSnakeCase` | Converts both sides to `UPPER_SNAKE_CASE` before comparison |
+
+  ```csharp
+  [Mapper(PropertyNameMappingStrategy = PropertyNameMappingStrategy.CaseInsensitive)]
+  public partial class CarMapper { }
+  ```
+</ParamField>
+
+<ParamField path="EnumMappingStrategy" type="EnumMappingStrategy" default="ByValue">
+  The default strategy used when mapping one enum to another. Can be overridden per mapping method with `[MapEnum]`.
+
+  | Value | Description |
+  |-------|-------------|
+  | `ByValue` | Matches enum members by their underlying integer value (default) |
+  | `ByName` | Matches enum members by their name |
+  | `ByValueCheckDefined` | Like `ByValue`, but also verifies the value is defined in the target enum |
+</ParamField>
+
+<ParamField path="EnumNamingStrategy" type="EnumNamingStrategy" default="MemberName">
+  Strategy used when mapping an enum from or to a `string`. Can be overridden per mapping method with `[MapEnum]`.
+
+  | Value | Description |
+  |-------|-------------|
+  | `MemberName` | Uses the enum member name (default) |
+  | `CamelCase` | Uses `camelCase` |
+  | `PascalCase` | Uses `PascalCase` |
+  | `SnakeCase` | Uses `snake_case` |
+  | `UpperSnakeCase` | Uses `UPPER_SNAKE_CASE` |
+  | `KebabCase` | Uses `kebab-case` |
+  | `UpperKebabCase` | Uses `UPPER-KEBAB-CASE` |
+  | `ComponentModelDescriptionAttribute` | Uses `[Description]` value, falls back to member name |
+  | `SerializationEnumMemberAttribute` | Uses `[EnumMember(Value = ...)]`, falls back to member name |
+</ParamField>
+
+<ParamField path="EnumMappingIgnoreCase" type="bool" default="false">
+  When `true`, case is ignored when matching enum member names during string-to-enum or enum-by-name mappings.
+
+  ```csharp
+  [Mapper(EnumMappingIgnoreCase = true)]
+  public partial class OrderMapper { }
+  ```
+</ParamField>
+
+<ParamField path="ThrowOnMappingNullMismatch" type="bool" default="true">
+  Controls what happens when a mapping method would return `null` but has a non-nullable return type.
+
+  - `true` (default): throws `ArgumentNullException`.
+  - `false`: returns a default value — `string.Empty` for strings, `default` for value types, `new()` for reference types with a parameterless constructor; throws `ArgumentNullException` if no such constructor exists.
+
+  <Note>
+    This setting is ignored for required init properties and `IQueryable<T>` projection mappings.
+  </Note>
+</ParamField>
+
+<ParamField path="ThrowOnPropertyMappingNullMismatch" type="bool" default="false">
+  Controls what happens when a `null` source value would be assigned to a non-nullable target property.
+
+  - `false` (default): the property assignment is skipped.
+  - `true`: throws `ArgumentNullException`.
+
+  <Note>
+    Ignored for required init properties and `IQueryable<T>` projection mappings.
+  </Note>
+</ParamField>
+
+<ParamField path="AllowNullPropertyAssignment" type="bool" default="true">
+  Whether `null` source values are assigned to nullable target properties.
+
+  - `true` (default): if the source value is `null` and the target property allows `null`, `null` is assigned.
+  - `false`: `null` source values are never assigned; behavior then depends on `ThrowOnPropertyMappingNullMismatch`.
+
+  <Note>
+    Ignored for required init properties and `IQueryable<T>` projection mappings.
+  </Note>
+</ParamField>
+
+<ParamField path="UseDeepCloning" type="bool" default="false">
+  When `true`, objects that could be directly assigned are cloned instead. For example, if both source and target types are `Car[]`, each element is cloned rather than reusing the same array.
+
+  ```csharp
+  [Mapper(UseDeepCloning = true)]
+  public partial class CarMapper { }
+  ```
+
+  <Note>
+    Deep cloning is not applied to `IQueryable` projection mappings.
+  </Note>
+</ParamField>
+
+<ParamField path="StackCloningStrategy" type="StackCloningStrategy" default="PreserveOrder">
+  Determines the element order when deep-cloning a `Stack<T>`.
+
+  | Value | Description |
+  |-------|-------------|
+  | `PreserveOrder` | Cloned stack has the same element order (default) |
+  | `ReverseOrder` | Elements are reversed (matches `new Stack<T>(IEnumerable<T>)` behavior) |
+
+  ```csharp
+  [Mapper(UseDeepCloning = true, StackCloningStrategy = StackCloningStrategy.ReverseOrder)]
+  public partial class MyMapper { }
+  ```
+</ParamField>
+
+<ParamField path="EnabledConversions" type="MappingConversionType" default="MappingConversionType.Default">
+  Flags enum controlling which automatic type conversions Mapperly will generate. The default enables everything except explicit casts (`All & ~ExplicitCast`).
+
+  Common values:
+
+  | Value | Description |
+  |-------|-------------|
+  | `None` | Disable all automatic conversions |
+  | `All` | Enable all conversions |
+  | `Default` | All except `ExplicitCast` (default) |
+  | `Constructor` | Target type constructor accepting source type |
+  | `ImplicitCast` | Implicit cast operators |
+  | `ExplicitCast` | Explicit cast operators |
+  | `ParseMethod` | `static TargetType.Parse(string)` |
+  | `ToStringMethod` | `.ToString()` calls |
+  | `StringToEnum` | Parse string to enum by name |
+  | `EnumToString` | Enum member name to string |
+  | `EnumToEnum` | Enum-to-enum using `EnumMappingStrategy` |
+  | `Queryable` | `IQueryable<T>` projections |
+  | `Enumerable` | `IEnumerable<T>` element-by-element |
+  | `Dictionary` | `IDictionary` / `IReadOnlyDictionary` |
+  | `Span` | `Span<T>` / `ReadOnlySpan<T>` |
+  | `Memory` | `Memory<T>` / `ReadOnlyMemory<T>` |
+  | `Tuple` | `ValueTuple` or tuple expressions |
+  | `EnumUnderlyingType` | Map enum to/from its underlying numeric type |
+  | `ToTargetMethod` | Instance `ToTarget()` methods |
+  | `StaticConvertMethods` | Static `From`, `Create`, `CreateFrom` methods |
+  | `Expression` | `Expression<Func<TSource, TTarget>>` |
+
+  ```csharp
+  // Disable ToString() conversions
+  [Mapper(EnabledConversions = MappingConversionType.All & ~MappingConversionType.ToStringMethod)]
+  public partial class CarMapper { }
+  ```
+</ParamField>
+
+<ParamField path="UseReferenceHandling" type="bool" default="false">
+  Enables reference tracking across the mapping. When `true`, an `IReferenceHandler` instance is threaded through all mapping methods so that existing target object instances can be reused and circular references can be handled.
+
+  Disabled by default for performance reasons.
+
+  ```csharp
+  [Mapper(UseReferenceHandling = true)]
+  public partial class CarMapper { }
+  ```
+</ParamField>
+
+<ParamField path="IgnoreObsoleteMembersStrategy" type="IgnoreObsoleteMembersStrategy" default="None">
+  Determines how members decorated with `[Obsolete]` are handled across all mapping methods in the mapper. Can be overridden per method with `[MapperIgnoreObsoleteMembers]`.
+
+  | Value | Description |
+  |-------|-------------|
+  | `None` | Maps obsolete members normally (default) |
+  | `Both` | Ignores both source and target obsolete members |
+  | `Source` | Ignores obsolete source members only |
+  | `Target` | Ignores obsolete target members only |
+
+  <Note>
+    `[MapProperty]` always maps the specified member even if it is marked `[Obsolete]` and this strategy would otherwise ignore it.
+  </Note>
+</ParamField>
+
+<ParamField path="RequiredMappingStrategy" type="RequiredMappingStrategy" default="Both">
+  Defines when Mapperly emits a warning for unmapped members across all mapping methods. Can be overridden per method with `[MapperRequiredMapping]`.
+
+  | Value | Description |
+  |-------|-------------|
+  | `None` | No warnings for unmapped members |
+  | `Both` | Warn for unmapped source and target members (default) |
+  | `Source` | Warn only for unmapped source members |
+  | `Target` | Warn only for unmapped target members |
+
+  ```csharp
+  [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
+  public partial class CarMapper { }
+  ```
+</ParamField>
+
+<ParamField path="RequiredEnumMappingStrategy" type="RequiredMappingStrategy" default="Both">
+  Controls unmapped-member warnings specifically for enum mappings. Defaults to `Both`, inheriting the same behavior as `RequiredMappingStrategy`.
+</ParamField>
+
+<ParamField path="IncludedMembers" type="MemberVisibility" default="AllAccessible">
+  Determines which access levels of properties and fields Mapperly will map.
+
+  | Value | Description |
+  |-------|-------------|
+  | `AllAccessible` | All directly accessible members (default) |
+  | `All` | All members including inaccessible ones (uses `UnsafeAccessor` on .NET 8+) |
+  | `Public` | Public members only |
+  | `Internal` | Internal members |
+  | `Protected` | Protected members |
+  | `Private` | Private members |
+
+  Values are flags and can be combined: `MemberVisibility.Public | MemberVisibility.Internal`.
+</ParamField>
+
+<ParamField path="IncludedConstructors" type="MemberVisibility" default="AllAccessible">
+  Determines which access levels of constructors Mapperly considers when constructing target objects. Accepts the same flag values as `IncludedMembers`.
+</ParamField>
+
+<ParamField path="PreferParameterlessConstructors" type="bool" default="true">
+  Controls which constructor Mapperly prefers when multiple are accessible.
+
+  - `true` (default): parameterless constructor is preferred.
+  - `false`: constructors are ordered by descending parameter count.
+</ParamField>
+
+<ParamField path="AutoUserMappings" type="bool" default="true">
+  Whether Mapperly automatically discovers user-implemented mapping methods based on their signature.
+
+  - `true` (default): all partial methods and any method with a mapping-compatible signature and implementation body are treated as mapping methods.
+  - `false`: only partial methods and methods explicitly annotated with `[UserMapping]` are discovered.
+
+  The same rule applies to methods on external mappers referenced via `[UseMapper]` or `[UseStaticMapper]`.
+
+  ```csharp
+  [Mapper(AutoUserMappings = false)]
+  public partial class CarMapper
+  {
+      // Only partial methods and [UserMapping]-annotated methods are used
+      public partial CarDto MapCar(Car car);
+  }
+  ```
+</ParamField>
+
+---
+
+## MapperConstructorAttribute
+
+Marks a specific constructor on a target type as the constructor that Mapperly should use when instantiating that type. Apply it directly on the constructor.
+
+```csharp
+public class CarDto
+{
+    [MapperConstructor]
+    public CarDto(string model, int seats)
+    {
+        Model = model;
+        NumberOfSeats = seats;
+    }
+
+    // This constructor is ignored by Mapperly even though it is accessible
+    public CarDto() { }
+
+    public string Model { get; set; }
+    public int NumberOfSeats { get; set; }
+}
+```
+
+**Targets:** `Constructor`
+
+<Note>
+  When `[MapperConstructor]` is placed on a constructor, Mapperly respects it even when a copy constructor (a single-parameter constructor accepting the same type) is present. This behavior was fixed in v5.0.
+</Note>
+
+---
+
+## Assembly-level defaults: MapperDefaultsAttribute
+
+`MapperDefaultsAttribute` inherits all properties from `MapperAttribute` and is applied at the assembly level. It sets default values for every mapper in the assembly.
+
+```csharp
+// AssemblyInfo.cs or any file in the project
+[assembly: MapperDefaults(EnumMappingIgnoreCase = true)]
+```
+
+Settings on a specific `[Mapper]` attribute take precedence over `MapperDefaultsAttribute`.
+
+---
+
+## MSBuild configuration
+
+You can also configure Mapperly defaults in your `.csproj` or `Directory.Build.props` using MSBuild properties. Property names match `MapperAttribute` properties prefixed with `Mapperly`.
+
+```xml
+<PropertyGroup>
+  <MapperlyEnumMappingIgnoreCase>true</MapperlyEnumMappingIgnoreCase>
+  <MapperlyRequiredMappingStrategy>Both</MapperlyRequiredMappingStrategy>
+  <MapperlyThrowOnMappingNullMismatch>true</MapperlyThrowOnMappingNullMismatch>
+</PropertyGroup>
+```
+
+The precedence order from highest to lowest is:
+
+1. `[Mapper]` on the class
+2. `[assembly: MapperDefaults]`
+3. MSBuild properties

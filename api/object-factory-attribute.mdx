@@ -1,0 +1,162 @@
+---
+title: "ObjectFactoryAttribute"
+description: "Reference for [ObjectFactory] to control how target objects are instantiated."
+---
+
+## Overview
+
+By default, Mapperly instantiates target objects using their parameterless constructor, or — when no parameterless constructor exists — by matching source values to constructor parameters. `[ObjectFactory]` lets you provide a custom factory method instead, for cases where you need to resolve the object from a DI container, call a named factory, or apply any other custom construction logic.
+
+Annotate a method inside your mapper class with `[ObjectFactory]`. Mapperly uses the first matching factory when constructing the target type.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [ObjectFactory]
+    private CarDto CreateCarDto() => CarDto.CreateFromCustomMethod();
+
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+The generated code calls your factory before mapping properties:
+
+```csharp
+public partial CarDto CarToCarDto(Car car)
+{
+    var target = CreateCarDto();
+    // map all properties...
+    return target;
+}
+```
+
+---
+
+## Method signature requirements
+
+An object factory method must:
+
+- Be annotated with `[ObjectFactory]`.
+- Have a non-`void` return type (the type it constructs).
+- Accept zero or one parameter. When a parameter is present, Mapperly passes the source object as the argument.
+- Be defined inside the mapper class.
+
+<Warning>
+  When an object factory is used for a given type, Mapperly cannot map to **init-only properties** or **constructor parameters** for that type, because the object is already constructed before property mapping runs.
+</Warning>
+
+<Note>
+  Object factories are **not** applied to `IQueryable<T>` projection mappings, which rely on expression trees and object initializers.
+</Note>
+
+---
+
+## Supported method signatures
+
+Mapperly recognizes the following factory method signatures:
+
+```csharp
+// Parameterless — called with no arguments
+TargetType CreateTargetType();
+
+// Single source parameter — source object is passed
+TargetType CreateTargetType(SourceType source);
+
+// Generic source parameter
+TargetType CreateTargetType<S>(S source);
+
+// Generic return type — matches any type T
+T CreateTargetType<T>();
+
+// Generic return type with source parameter
+T CreateTargetType<T>(SourceType source);
+
+// Both type parameters generic — source and target
+TTarget CreateTargetType<TSource, TTarget>(TSource source);
+TTarget CreateTargetType<TTarget, TSource>(TSource source);
+```
+
+Mapperly picks the first factory whose signature matches the source and target types being mapped.
+
+---
+
+## Generic object factories
+
+A generic factory with a single unconstrained type parameter is matched against any target type:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    // Resolves any target type from the DI container
+    [ObjectFactory]
+    private T Create<T>() => _diContainer.Resolve<T>();
+
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+You can use generic constraints to limit which types the factory applies to:
+
+```csharp
+[ObjectFactory]
+private T CreateCar<T>() where T : CarDto
+    => CarDto.CreateFromCustomMethod() as T;
+```
+
+---
+
+## Examples
+
+### Factory with a source parameter
+
+Use the source object to influence how the target is constructed:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [ObjectFactory]
+    private CarDto CreateCarDto(Car source)
+        => source.IsElectric ? new ElectricCarDto() : new CarDto();
+
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+### DI container resolution
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    private readonly IServiceProvider _services;
+
+    public CarMapper(IServiceProvider services) => _services = services;
+
+    [ObjectFactory]
+    private T Resolve<T>() => _services.GetRequiredService<T>();
+
+    public partial CarDto CarToCarDto(Car car);
+}
+```
+
+### Multiple factories for different types
+
+Mapperly uses the first factory whose return type matches. Declare more specific factories before generic ones:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    [ObjectFactory]
+    private ElectricCarDto CreateElectricCarDto() => new ElectricCarDto { Source = "factory" };
+
+    [ObjectFactory]
+    private CarDto CreateCarDto() => CarDto.CreateDefault();
+
+    public partial CarDto CarToCarDto(Car car);
+    public partial ElectricCarDto ElectricCarToDto(ElectricCar car);
+}
+```

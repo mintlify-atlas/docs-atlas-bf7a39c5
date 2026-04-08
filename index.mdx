@@ -1,97 +1,77 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Mapperly"
+description: "A .NET source generator for object mappings — zero runtime reflection, readable output."
 ---
 
-## Setting up
+Mapperly generates object-to-object mapping code at compile time using .NET source generators. You define mapping method signatures; Mapperly writes the implementations. The result is fast, readable code with no runtime overhead.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Add the NuGet package to your project
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="First mapper" icon="wand-magic-sparkles" href="/getting-started/first-mapper">
+    Create your first mapper in minutes
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Configuration" icon="sliders" href="/configuration/mapper">
+    Customize properties, enums, and null handling
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API reference" icon="code" href="/api/mapper-attribute">
+    Browse every attribute and option
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Why Mapperly?
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Zero runtime overhead" icon="bolt">
+    All mapping code is generated at build time — no reflection, no dynamic code.
+  </Card>
+  <Card title="AOT & trimming safe" icon="shield-check">
+    Fully compatible with NativeAOT and trimmed .NET applications.
+  </Card>
+  <Card title="Readable generated code" icon="eye">
+    Output looks like hand-written code — easy to inspect and step through in a debugger.
+  </Card>
+  <Card title="Compile-time safety" icon="triangle-exclamation">
+    Unmapped members produce build warnings or errors before your code ever runs.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Quick start
 
-## Need inspiration?
+<Steps>
+  <Step title="Install the package">
+    ```bash
+    dotnet add package Riok.Mapperly
+    ```
+  </Step>
+  <Step title="Declare a mapper">
+    ```csharp
+    using Riok.Mapperly.Abstractions;
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    [Mapper]
+    public partial class CarMapper
+    {
+        public partial CarDto CarToCarDto(Car car);
+    }
+    ```
+  </Step>
+  <Step title="Use it">
+    ```csharp
+    var mapper = new CarMapper();
+    var dto = mapper.CarToCarDto(car);
+    ```
+  </Step>
+</Steps>
+
+<CardGroup cols={3}>
+  <Card title="Enum mapping" icon="list" href="/configuration/enum">
+    Map enums by value, name, or string with flexible strategies
+  </Card>
+  <Card title="IQueryable projections" icon="database" href="/configuration/queryable-projections">
+    Optimize ORM queries with expression-tree projections
+  </Card>
+  <Card title="External mappers" icon="puzzle-piece" href="/configuration/external-mappings">
+    Compose mappings across multiple mapper classes
+  </Card>
+</CardGroup>

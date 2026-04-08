@@ -1,0 +1,71 @@
+---
+title: "Static mappers"
+description: "Define mappers as static classes for extension-method style or zero-allocation usage."
+keywords: ["static mapper", "static class", "extension method", "static interface", "IQueryable", "zero allocation"]
+---
+
+Mapperly supports static mapper classes. A static mapper is a `static partial class` with the `[Mapper]` attribute. All mapping methods are static, which makes them usable as extension methods and avoids any heap allocation for the mapper itself.
+
+## Defining a static mapper
+
+```csharp
+[Mapper]
+public static partial class CarMapper
+{
+    public static partial CarDto ToCarDto(this Car car);
+
+    private static int TimeSpanToHours(TimeSpan t) => t.Hours;
+}
+```
+
+The `this` parameter on `ToCarDto` makes it an extension method, so you can call it directly on a `Car` instance:
+
+```csharp
+var dto = car.ToCarDto();
+```
+
+## IQueryable projections
+
+Static mappers are required for [IQueryable projections](/configuration/queryable-projections). Projection methods must be static because they are translated to expression trees:
+
+```csharp
+[Mapper]
+public static partial class CarMapper
+{
+    public static partial IQueryable<CarDto> ProjectToDto(this IQueryable<Car> q);
+}
+```
+
+## Static methods in non-static classes
+
+You can also define static mapping methods inside a non-static mapper class. This is useful for implementing static abstract interface members:
+
+```csharp
+public interface ICarMapper
+{
+    static abstract CarDto ToDto(Car car);
+}
+
+[Mapper]
+public partial class CarMapper : ICarMapper
+{
+    public static partial CarDto ToDto(Car car);
+}
+```
+
+<Note>
+  When a static mapping method is present in a non-static mapper class, all mapping methods in that class must be static. This avoids ambiguity in method resolution.
+</Note>
+
+## Static vs instance mappers
+
+| | Static mapper | Instance mapper |
+|---|---|---|
+| Class declaration | `static partial class` | `partial class` |
+| Method style | Extension methods possible | Instance methods |
+| Heap allocation | None (no mapper object) | One object per mapper |
+| IQueryable projections | Supported | Not supported |
+| `[UseMapper]` fields | Not applicable | Supported |
+| State / DI | Not possible | Possible via constructor |
+
+Use a static mapper when you want extension-method ergonomics, zero-allocation mapping, or IQueryable projection support. Use an instance mapper when you need to inject dependencies or hold state (for example, a configuration object or a `[UseMapper]`-annotated field for [external mappings](/configuration/external-mappings)).

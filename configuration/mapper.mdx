@@ -1,0 +1,246 @@
+---
+title: "Mapper configuration"
+description: "Configure the mapper class with MapperAttribute and project-wide defaults."
+keywords: ["mapper", "MapperAttribute", "MapperDefaults", "configuration", "null handling", "deep cloning"]
+---
+
+Apply `[Mapper]` to a `partial` class to mark it as a Mapperly mapper. Mapperly generates the mapping implementations at compile time.
+
+```csharp
+using Riok.Mapperly.Abstractions;
+
+[Mapper]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+## Project-wide defaults
+
+### MapperDefaultsAttribute
+
+`MapperDefaultsAttribute` sets default configuration for all mappers in an assembly. Any property accepted by `[Mapper]` can be used here.
+
+```csharp
+[assembly: MapperDefaults(EnumMappingIgnoreCase = true)]
+```
+
+Settings on an individual `[Mapper]` override the assembly-level defaults.
+
+### MSBuild properties
+
+You can also configure defaults in your `.csproj` or `Directory.Build.props`. Property names correspond to `MapperAttribute` properties prefixed with `Mapperly`.
+
+```xml
+<PropertyGroup>
+  <MapperlyEnumMappingIgnoreCase>true</MapperlyEnumMappingIgnoreCase>
+  <MapperlyRequiredMappingStrategy>Both</MapperlyRequiredMappingStrategy>
+</PropertyGroup>
+```
+
+`MapperDefaultsAttribute` takes precedence over MSBuild properties.
+
+## Deep cloning
+
+By default, Mapperly assigns objects directly when the source and target types are compatible — it does not clone them. To always produce deep copies, set `UseDeepCloning = true`.
+
+```csharp
+[Mapper(UseDeepCloning = true)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+<Note>
+  Deep cloning is not applied to `IQueryable` projection mappings.
+</Note>
+
+### Stack cloning strategy
+
+When deep-cloning a `Stack<T>`, element order is preserved by default. Use `StackCloningStrategy` to change this behavior.
+
+| Value            | Description                                          |
+| ---------------- | ---------------------------------------------------- |
+| `PreserveOrder`  | Preserves the original element order (default)       |
+| `ReverseOrder`   | Reverses the order of elements (legacy behavior)     |
+
+```csharp
+[Mapper(UseDeepCloning = true, StackCloningStrategy = StackCloningStrategy.ReverseOrder)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+## Null handling
+
+Mapperly provides three properties to control null behavior.
+
+### AllowNullPropertyAssignment
+
+When `true` (default), if the source value is `null` and the target property is nullable, `null` is explicitly assigned. When `false`, the property assignment is skipped or an exception is thrown (see `ThrowOnPropertyMappingNullMismatch`).
+
+### ThrowOnPropertyMappingNullMismatch
+
+When `true`, an `ArgumentNullException` is thrown if a null source value would be assigned to a non-nullable target property. When `false` (default), the assignment is silently skipped.
+
+### ThrowOnMappingNullMismatch
+
+Controls what happens when a mapping method would return `null` but has a non-nullable return type.
+
+- `true` (default): throws `ArgumentNullException`.
+- `false`: Mapperly returns a default value — `string.Empty` for strings, `default` for value types, `new()` for reference types with a parameterless constructor. If no such constructor exists, an `ArgumentNullException` is thrown.
+
+<Info>
+  `AllowNullPropertyAssignment`, `ThrowOnPropertyMappingNullMismatch`, and `ThrowOnMappingNullMismatch` are ignored for required init properties and `IQueryable<T>` projection mappings.
+</Info>
+
+## Required mapping strategy
+
+By default, Mapperly emits a warning for any unmapped source or target members. Use `RequiredMappingStrategy` to restrict which side is enforced.
+
+| Value    | Description                                                    |
+| -------- | -------------------------------------------------------------- |
+| `Both`   | Warn for unmapped source and target members (default)          |
+| `Source` | Warn only for unmapped source members                          |
+| `Target` | Warn only for unmapped target members                          |
+| `None`   | Do not warn for unmapped members                               |
+
+<Tabs>
+  <Tab title="Global (mapper level)">
+    Sets the strategy for all methods in the mapper. Individual methods can override this with `[MapperRequiredMapping]`.
+
+    ```csharp
+    [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Source)]
+    public partial class CarMapper
+    {
+        public partial CarDto MapCar(Car car);
+    }
+    ```
+  </Tab>
+  <Tab title="Per method">
+    Applies to a single mapping method.
+
+    ```csharp
+    [Mapper]
+    public partial class CarMapper
+    {
+        [MapperRequiredMapping(RequiredMappingStrategy.Source)]
+        public partial CarDto MapCar(Car car);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Property name matching
+
+By default, property and field names are matched case-sensitively. Change this with `PropertyNameMappingStrategy`.
+
+| Value            | Description                                                          |
+| ---------------- | -------------------------------------------------------------------- |
+| `CaseSensitive`  | Exact name match (default)                                           |
+| `CaseInsensitive`| Matches ignoring case differences                                    |
+| `SnakeCase`      | Converts names to `snake_case` before comparing                      |
+| `UpperSnakeCase` | Converts names to `UPPER_SNAKE_CASE` before comparing                |
+
+```csharp
+[Mapper(PropertyNameMappingStrategy = PropertyNameMappingStrategy.CaseInsensitive)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+## Member visibility
+
+By default, Mapperly maps all ordinarily accessible members (`MemberVisibility.AllAccessible`). Use `IncludedMembers` and `IncludedConstructors` to expand or restrict this.
+
+To map private and protected members via `UnsafeAccessor` (zero overhead, AOT safe):
+
+```csharp
+[Mapper(
+    IncludedMembers = MemberVisibility.All,
+    IncludedConstructors = MemberVisibility.All)]
+public partial class FruitMapper
+{
+    public partial FruitDto ToDto(Fruit source);
+}
+```
+
+You can also combine flags to target specific visibility levels:
+
+```csharp
+[Mapper(IncludedMembers = MemberVisibility.Private | MemberVisibility.Protected)]
+public partial class FruitMapper
+{
+    public partial FruitDto ToDto(Fruit source);
+}
+```
+
+`IncludedConstructors` can be set independently of `IncludedMembers`, letting you use inaccessible constructors while only mapping accessible members (or vice versa).
+
+## Constructor selection
+
+Mapperly selects constructors in this order:
+
+1. Constructors annotated with `[MapperConstructor]`
+2. If `PreferParameterlessConstructors = true` (default): parameterless constructor first, then constructors ordered by parameter count descending
+3. If `PreferParameterlessConstructors = false`: constructors ordered by parameter count descending, then parameterless
+
+Constructors marked with `[Obsolete]` are skipped unless they also have `[MapperConstructor]`.
+
+The first constructor where all parameters can be mapped is used.
+
+```csharp
+[Mapper(PreferParameterlessConstructors = false)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+## Auto user mappings
+
+When `AutoUserMappings = true` (default), Mapperly automatically discovers user-implemented methods with a mapping method signature as mapping methods. Set to `false` to require explicit `[UserMapping]` annotations.
+
+```csharp
+[Mapper(AutoUserMappings = false)]
+public partial class CarMapper
+{
+    public partial CarDto MapCar(Car source);
+
+    private string MapPrice(decimal price) => (price / 100).ToString("C");
+}
+```
+
+## Enabled conversions
+
+Controls which automatic type conversions Mapperly applies. By default, all conversions except explicit casts are enabled (`MappingConversionType.Default`). See [Type conversions](/configuration/conversions) for details.
+
+```csharp
+// Disable all automatic conversions
+[Mapper(EnabledConversions = MappingConversionType.None)]
+public partial class CarMapper { }
+
+// Disable only ToString conversions
+[Mapper(EnabledConversions = MappingConversionType.All & ~MappingConversionType.ToStringMethod)]
+public partial class CarMapper { }
+```
+
+## Reference handling
+
+Reference handling tracks object instances during mapping to handle circular references and object identity. It is disabled by default for performance reasons.
+
+```csharp
+[Mapper(UseReferenceHandling = true)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+<Note>
+  See [Reference handling](/configuration/reference-handling) for full details.
+</Note>

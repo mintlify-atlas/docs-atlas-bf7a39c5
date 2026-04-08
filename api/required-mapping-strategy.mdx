@@ -1,0 +1,90 @@
+---
+title: 'RequiredMappingStrategy'
+description: 'Reference for RequiredMappingStrategy, which controls which unmapped members produce diagnostics.'
+keywords: ['required mapping', 'unmapped members', 'diagnostics', 'warning', 'RequiredMappingStrategy', 'RequiredEnumMappingStrategy']
+---
+
+`RequiredMappingStrategy` is a flags enum that controls whether Mapperly emits diagnostics when source or target members are left unmapped.
+
+By default, the strategy is `Both`, meaning Mapperly warns for any unmapped member on either side of a mapping.
+
+## RequiredMappingStrategy values
+
+| Value | Description |
+|---|---|
+| `None` | No diagnostics are emitted for unmapped source or target members. |
+| `Source` | Diagnostics are emitted for unmapped source members only. |
+| `Target` | Diagnostics are emitted for unmapped target members only. |
+| `Both` | Diagnostics are emitted for unmapped members on both sides. This is the default. |
+
+<Note>
+Diagnostics for unmapped members are emitted as warnings by default. Use `[MapperIgnoreSource]` or `[MapperIgnoreTarget]` to suppress specific members rather than disabling the strategy entirely.
+</Note>
+
+## Where it can be applied
+
+### MapperAttribute (mapper-wide)
+
+Sets the strategy for all mapping methods in the mapper. Individual methods can override this with `MapperRequiredMappingAttribute`.
+
+```csharp
+// Warn only for unmapped source members; ignore unmapped target members
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Source)]
+public partial class CarMapper
+{
+    public partial CarDto MapCar(Car car);
+}
+```
+
+### MapperDefaultsAttribute (assembly-wide)
+
+Sets the default for all mappers in the assembly. Can also be configured via MSBuild properties.
+
+```csharp
+[assembly: MapperDefaults(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
+```
+
+```xml
+<!-- In .csproj or Directory.Build.props -->
+<PropertyGroup>
+  <MapperlyRequiredMappingStrategy>Both</MapperlyRequiredMappingStrategy>
+</PropertyGroup>
+```
+
+### MapperRequiredMappingAttribute (per method)
+
+Overrides the mapper-level strategy for a single mapping method.
+
+```csharp
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Both)]
+public partial class CarMapper
+{
+    // This method only warns for unmapped source members
+    [MapperRequiredMapping(RequiredMappingStrategy.Source)]
+    public partial CarDto MapCar(Car car);
+}
+```
+
+`MapperRequiredMappingAttribute` is only valid on mapping methods.
+
+## RequiredEnumMappingStrategy
+
+`MapperAttribute` exposes a separate `RequiredEnumMappingStrategy` property that controls diagnostic behavior specifically for enum-to-enum, string-to-enum, and enum-to-string mappings.
+
+By default, `RequiredEnumMappingStrategy` inherits from `RequiredMappingStrategy`. Set it explicitly to apply different strictness to enum mappings.
+
+```csharp
+// Warn for all unmapped members, but only check source side for enum mappings
+[Mapper(
+    RequiredMappingStrategy = RequiredMappingStrategy.Both,
+    RequiredEnumMappingStrategy = RequiredMappingStrategy.Source)]
+public partial class CarMapper
+{
+    public partial CarDto MapCar(Car car);
+    public partial CarMakeDto MapMake(CarMake make);
+}
+```
+
+<Tip>
+To suppress diagnostics for a specific enum member without changing the strategy, use `[MapperIgnoreSourceValue]` or `[MapperIgnoreTargetValue]` on the mapping method.
+</Tip>

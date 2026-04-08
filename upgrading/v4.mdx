@@ -1,0 +1,167 @@
+---
+title: "Upgrading to v4"
+description: "Migration guide for upgrading from Mapperly v3.6.0 to v4.0."
+---
+
+Mapperly v4.0 makes strict mappings the default, adds a new `EnumUnderlyingType` conversion, maps ForEach members, and caps auto-flattening at 256 permutations. Several diagnostics are also changed, merged, or removed.
+
+## Migration steps
+
+<Steps>
+  <Step title="Address strict mapping warnings">
+    Strict mappings are now enabled by default at `Warning` severity. Resolve unmapped members by ignoring them, adding explicit mappings, or reverting to the previous behavior in your `.editorconfig`.
+
+    See [Strict mappings by default](#strict-mappings-by-default) for all options.
+  </Step>
+  <Step title="Review the EnumUnderlyingType conversion">
+    If your project disables `ExplicitCast`, you must also disable the new `EnumUnderlyingType` conversion to restore the previous behavior.
+
+    ```csharp
+    [Mapper(EnabledConversions = MappingConversionType.All & ~MappingConversionType.EnumUnderlyingType)]
+    public partial class MyMapper { }
+    ```
+  </Step>
+  <Step title="Review ForEach member mappings">
+    ForEach mappings now map members and constructor parameters. Check any existing ForEach-based mappings for newly produced diagnostics or unexpected member assignments.
+  </Step>
+  <Step title="Verify auto-flattening still works">
+    For types with very long property names, auto-flattening may stop working because Mapperly now tries at most 256 permutations. Use `[MapProperty]` to configure those paths explicitly.
+
+    ```csharp
+    [MapProperty(
+        [nameof(Source.VeryLongPropertyName), nameof(Source.VeryLongPropertyName.AnotherLong)],
+        nameof(Target.VeryLongPropertyNameAnotherLong))]
+    public partial Target Map(Source source);
+    ```
+  </Step>
+  <Step title="Update .editorconfig for changed diagnostics">
+    Several diagnostic IDs changed severity, were merged, or were removed. Review the [Updated diagnostics](#updated-diagnostics) table and adjust your `.editorconfig` accordingly.
+  </Step>
+</Steps>
+
+## Breaking changes
+
+### Strict mappings by default
+
+<Warning>
+  Starting with v4.0, strict mappings are enabled by default. Diagnostics `RMG012`, `RMG020`, `RMG037`, and `RMG038` are now emitted at `Warning` severity instead of `Info`/`Suggestion`. This will cause build warnings — or errors if you treat warnings as errors — in projects with unmapped members.
+</Warning>
+
+You have three options:
+
+**Option 1 — Fix unmapped members (recommended).** Add explicit `[MapperIgnoreSource]` / `[MapperIgnoreTarget]` annotations, or add the missing property mapping.
+
+**Option 2 — Configure the required mapping strategy.** Use `MapperAttribute.RequiredMappingStrategy` or `MapperRequiredMappingAttribute` to control which members must be mapped.
+
+```csharp
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.None)]
+public partial class MyMapper { }
+```
+
+**Option 3 — Revert to the previous severity.** Set the diagnostic severities back to `suggestion` in your `.editorconfig`:
+
+```ini .editorconfig
+[*.cs]
+dotnet_diagnostic.RMG012.severity = suggestion
+dotnet_diagnostic.RMG020.severity = suggestion
+dotnet_diagnostic.RMG037.severity = suggestion
+dotnet_diagnostic.RMG038.severity = suggestion
+```
+
+---
+
+### Enum underlying type conversion
+
+<Warning>
+  A new `EnumUnderlyingType` conversion is introduced. Previously, `ExplicitCast` controlled enum-to-underlying-type mapping. If you disabled `ExplicitCast`, you must also disable `EnumUnderlyingType` to preserve the previous behavior.
+</Warning>
+
+When Mapperly cannot map directly between an enum and another type, it now tries to map via the enum's underlying type and explicitly cast the result. This behavior is controlled by the new `MappingConversionType.EnumUnderlyingType` flag, separate from `ExplicitCast`.
+
+| Scenario | Before v4.0 | v4.0+ |
+| --- | --- | --- |
+| Enum ↔ underlying type | Controlled by `ExplicitCast` | Controlled by `EnumUnderlyingType` |
+| Disable this conversion | Disable `ExplicitCast` | Disable `EnumUnderlyingType` |
+
+```csharp Disable EnumUnderlyingType
+[Mapper(EnabledConversions = MappingConversionType.All & ~MappingConversionType.EnumUnderlyingType)]
+public partial class MyMapper { }
+```
+
+---
+
+### ForEach member mappings
+
+<Warning>
+  ForEach mappings now map members and constructor parameters, exactly like regular object-to-object mappings. Existing ForEach mappings may produce new diagnostics or map additional members that were previously ignored.
+</Warning>
+
+Before v4.0, members of the iterated element type were not mapped inside a ForEach mapping. Starting with v4.0, Mapperly applies full member mapping. If a newly mapped member cannot be converted, a diagnostic is emitted.
+
+To suppress a newly discovered member, apply `[MapperIgnoreSource]` or `[MapperIgnoreTarget]` on the ForEach mapping method.
+
+---
+
+### Limited auto-flattening
+
+<Warning>
+  Mapperly now tries at most 256 member path permutations when auto-flattening properties. Types with very long PascalCase property names may no longer be auto-flattened.
+</Warning>
+
+Auto-flattening maps a nested property like `source.Make.Name` to a flat property like `target.MakeName` by trying all PascalCase split permutations of the target name. Before v4.0, all permutations were tried regardless of count. Starting with v4.0, the limit is 256.
+
+When a path is no longer matched automatically, configure it explicitly:
+
+```csharp
+[MapProperty(
+    [nameof(Car.Make), nameof(Make.Name)],
+    nameof(CarDto.MakeName))]
+public partial CarDto Map(Car source);
+```
+
+---
+
+### Updated diagnostics
+
+<Warning>
+  Several diagnostic IDs have changed severity, been merged, or been removed. Update your `.editorconfig` and Mapperly configuration to match the new IDs.
+</Warning>
+
+| ID | Change |
+| --- | --- |
+| `RMG009` | Replaced by `RMG083` for immutable types. For read-only members, `RMG009` is still used as in v3. `RMG009` is no longer emitted for automatically matched read-only members. |
+| `RMG012` | Severity raised from `Info` to `Warning` (strict mappings by default). Diagnostic: *Source member was not found for target member*. |
+| `RMG017` | Merged into new `RMG074: Multiple mappings are configured for the same target member`. |
+| `RMG020` | Severity raised from `Info` to `Warning` (strict mappings by default). Diagnostic: *Source member is not mapped to any target member*. |
+| `RMG026` | Removed. Indexed members are now silently ignored starting with v4.0. |
+| `RMG027` | Merged into new `RMG074: Multiple mappings are configured for the same target member`. |
+| `RMG028` | Removed. Constructor parameters can now handle target paths. |
+| `RMG037` | Severity raised from `Info` to `Warning` (strict mappings by default). Diagnostic: *An enum member could not be found on the source enum*. |
+| `RMG038` | Severity raised from `Info` to `Warning` (strict mappings by default). Diagnostic: *An enum member could not be found on the target enum*. |
+
+If you referenced `RMG017` or `RMG027` in your `.editorconfig`, replace them with `RMG074`. Remove any entries for `RMG026` and `RMG028`.
+
+```ini .editorconfig — before
+dotnet_diagnostic.RMG017.severity = none
+dotnet_diagnostic.RMG027.severity = none
+dotnet_diagnostic.RMG026.severity = none
+```
+
+```ini .editorconfig — after
+dotnet_diagnostic.RMG074.severity = none
+# RMG026 and RMG028 entries can be deleted
+```
+
+### Well-known immutable types are not deep-cloned
+
+<Warning>
+  Even when `UseDeepCloning = true`, well-known .NET immutable types (such as `string`, `Uri`, records, and similar types) are no longer copied. They are assigned by reference instead.
+</Warning>
+
+This is a behavioral change in the generated code. If your code relied on deep cloning immutable types, you must implement a manual mapping for those types.
+
+### Member assignment ordering may change
+
+<Warning>
+  The order in which members are assigned inside a generated mapping method may differ from v3. If you depend on a specific assignment order (for example, via side effects or init-only member initialization order), diff the generated code after upgrading and verify correctness.
+</Warning>

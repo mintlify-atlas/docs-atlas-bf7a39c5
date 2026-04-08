@@ -1,0 +1,168 @@
+---
+title: 'Enum mapping strategies'
+description: 'Reference for EnumMappingStrategy, EnumNamingStrategy, PropertyNameMappingStrategy, MemberVisibility, IgnoreObsoleteMembersStrategy, and StackCloningStrategy.'
+keywords: ['enum', 'mapping strategy', 'naming strategy', 'member visibility', 'obsolete', 'stack cloning']
+---
+
+This page documents the enum types used to configure Mapperly's mapping behavior.
+
+## EnumMappingStrategy
+
+Defines the strategy used when mapping one enum type to another. Set via `MapperAttribute.EnumMappingStrategy` (mapper-wide) or `MapEnumAttribute` (per method).
+
+| Value | Description |
+|---|---|
+| `ByValue` | Matches enum members by their numeric value. This is the default. |
+| `ByName` | Matches enum members by their name as a string. |
+| `ByValueCheckDefined` | Matches enum members by their numeric value and throws if the mapped value is not defined in the target enum. |
+
+<Note>
+`ByValueCheckDefined` supports a `FallbackValue` on `MapEnumAttribute` to return a specific value instead of throwing when an undefined value is encountered.
+</Note>
+
+```csharp
+// Apply to all enum mappings in the mapper
+[Mapper(EnumMappingStrategy = EnumMappingStrategy.ByName)]
+public partial class CarMapper { }
+
+// Apply to a specific mapping method
+[Mapper]
+public partial class CarMapper
+{
+    [MapEnum(EnumMappingStrategy.ByName)]
+    public partial CarMakeDto MapMake(CarMake make);
+}
+```
+
+---
+
+## EnumNamingStrategy
+
+Defines the naming convention used when mapping between an enum and a `string`. Set via `MapperAttribute.EnumNamingStrategy` (mapper-wide) or `MapEnumAttribute.NamingStrategy` (per method).
+
+| Value | Description |
+|---|---|
+| `MemberName` | Uses the enum member's declared name. This is the default. |
+| `CamelCase` | Converts the member name to `camelCase`. |
+| `PascalCase` | Converts the member name to `PascalCase`. |
+| `SnakeCase` | Converts the member name to `snake_case`. |
+| `UpperSnakeCase` | Converts the member name to `UPPER_SNAKE_CASE`. |
+| `KebabCase` | Converts the member name to `kebab-case`. |
+| `UpperKebabCase` | Converts the member name to `UPPER-KEBAB-CASE`. |
+| `ComponentModelDescriptionAttribute` | Uses the `Description` property of `System.ComponentModel.DescriptionAttribute`. Falls back to `MemberName` if the attribute is absent. |
+| `SerializationEnumMemberAttribute` | Uses the `Value` property of `System.Runtime.Serialization.EnumMemberAttribute`. Falls back to `MemberName` if the attribute is absent. |
+
+<Note>
+Explicit enum value mappings (`MapEnumValueAttribute`) and fallback values (`FallbackValue` on `MapEnumAttribute`) are not affected by naming strategies.
+</Note>
+
+```csharp
+// Apply to all string <-> enum mappings in the mapper
+[Mapper(EnumNamingStrategy = EnumNamingStrategy.SnakeCase)]
+public partial class CarMapper { }
+
+// Apply to a specific mapping method
+[Mapper]
+public partial class CarMapper
+{
+    [MapEnum(EnumMappingStrategy.ByName, NamingStrategy = EnumNamingStrategy.SnakeCase)]
+    public partial CarMakeDto MapMake(CarMake make);
+}
+```
+
+---
+
+## PropertyNameMappingStrategy
+
+Defines how source and target property names are compared when resolving member mappings. Set via `MapperAttribute.PropertyNameMappingStrategy`.
+
+| Value | Description |
+|---|---|
+| `CaseSensitive` | Matches properties by their exact name. This is the default. |
+| `CaseInsensitive` | Matches properties ignoring case differences. |
+| `SnakeCase` | Converts both names to `snake_case` before comparing. For example, `FirstName` matches `first_name`. |
+| `UpperSnakeCase` | Converts both names to `UPPER_SNAKE_CASE` before comparing. For example, `FirstName` matches `FIRST_NAME`. |
+
+```csharp
+[Mapper(PropertyNameMappingStrategy = PropertyNameMappingStrategy.CaseInsensitive)]
+public partial class CarMapper { }
+```
+
+---
+
+## MemberVisibility
+
+A flags enum that controls which member accessibility levels Mapperly will consider when generating mappings. Set via `MapperAttribute.IncludedMembers` and `MapperAttribute.IncludedConstructors`.
+
+| Value | Description |
+|---|---|
+| `AllAccessible` | Maps all members directly accessible to the mapper. This is the default (`Public \| Internal \| Protected \| Accessible`). |
+| `All` | Maps all members regardless of accessibility, using `UnsafeAccessorAttribute` for inaccessible members. Requires .NET 8.0 or later. |
+| `Accessible` | Restricts mappings to members directly accessible. Without this flag, `UnsafeAccessorAttribute` is used for inaccessible members. |
+| `Public` | Includes `public` members. |
+| `Internal` | Includes `internal` members. |
+| `Protected` | Includes `protected` members. |
+| `Private` | Includes `private` members. |
+
+<Warning>
+Using `MemberVisibility.All` (which enables `UnsafeAccessorAttribute`) requires .NET 8.0 or later.
+</Warning>
+
+Flags can be combined with bitwise operators:
+
+```csharp
+// Include public and internal members, accessible only
+[Mapper(IncludedMembers = MemberVisibility.Public | MemberVisibility.Internal)]
+public partial class CarMapper { }
+
+// Include all members, using UnsafeAccessor for private/protected (.NET 8+ only)
+[Mapper(IncludedMembers = MemberVisibility.All)]
+public partial class CarMapper { }
+```
+
+---
+
+## IgnoreObsoleteMembersStrategy
+
+A flags enum that controls whether members annotated with `ObsoleteAttribute` are included in mappings. Set via `MapperAttribute.IgnoreObsoleteMembersStrategy` (mapper-wide) or `MapperIgnoreObsoleteMembersAttribute` (per method).
+
+| Value | Description |
+|---|---|
+| `None` | Maps members marked with `ObsoleteAttribute`. This is the default. |
+| `Both` | Ignores both source and target members marked with `ObsoleteAttribute`. |
+| `Source` | Ignores source members marked with `ObsoleteAttribute`. |
+| `Target` | Ignores target members marked with `ObsoleteAttribute`. |
+
+<Note>
+`MapPropertyAttribute` always maps `ObsoleteAttribute`-marked members, even when they would otherwise be ignored by this strategy.
+</Note>
+
+```csharp
+// Ignore obsolete members on both sides for the entire mapper
+[Mapper(IgnoreObsoleteMembersStrategy = IgnoreObsoleteMembersStrategy.Both)]
+public partial class CarMapper { }
+
+// Ignore obsolete source members for a specific method
+[Mapper]
+public partial class CarMapper
+{
+    [MapperIgnoreObsoleteMembers(IgnoreObsoleteMembersStrategy.Source)]
+    public partial CarMakeDto MapMake(CarMake make);
+}
+```
+
+---
+
+## StackCloningStrategy
+
+Defines the element order when cloning a `Stack<T>`. Set via `MapperAttribute.StackCloningStrategy`. Only applies when `UseDeepCloning` is `true`.
+
+| Value | Description |
+|---|---|
+| `PreserveOrder` | Preserves the original element order. This is the default. |
+| `ReverseOrder` | Reverses the element order, matching the behavior of `new Stack<T>(IEnumerable<T>)`. |
+
+```csharp
+[Mapper(UseDeepCloning = true, StackCloningStrategy = StackCloningStrategy.ReverseOrder)]
+public partial class MyMapper { }
+```

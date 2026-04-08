@@ -1,0 +1,72 @@
+---
+title: "Generic mappings"
+description: "Define generic mapping methods that work across multiple types."
+keywords: ["generic mapping", "generic method", "type parameter", "runtime type", "derived type", "TTarget"]
+---
+
+Mapperly supports generic mapping methods. When you declare a mapping with a generic type parameter, Mapperly generates a switch over all concrete mappings in the mapper that satisfy the type constraints.
+
+## Generic mapping methods
+
+```csharp
+[Mapper]
+public static partial class ModelMapper
+{
+    public static partial TTarget MapFruit<TTarget>(Fruit source);
+
+    private static partial BananaDto MapBanana(Banana source);
+    private static partial AppleDto MapApple(Apple source);
+}
+
+class Fruit {}
+class Banana : Fruit {}
+class Apple : Fruit {}
+
+class BananaDto {}
+class AppleDto {}
+```
+
+When `MapFruit<BananaDto>(banana)` is called, Mapperly routes to `MapBanana`. When called with `MapFruit<AppleDto>(apple)`, it routes to `MapApple`.
+
+<Info>
+  Generic mappings only support source/target type combinations that are explicitly defined as mappings in the same mapper. If an unknown type combination is provided at runtime, an `ArgumentException` is thrown.
+</Info>
+
+## Runtime target type parameter
+
+If the target type is not known at compile time, declare a mapping method that accepts a `Type` parameter. Mapperly generates a runtime dispatch over all mappings defined in the mapper:
+
+```csharp
+[Mapper]
+public static partial class ModelMapper
+{
+    public static partial object Map(object source, Type targetType);
+
+    private static partial BananaDto MapBanana(Banana source);
+    private static partial AppleDto MapApple(Apple source);
+}
+
+class Banana {}
+class Apple {}
+
+class BananaDto {}
+class AppleDto {}
+```
+
+## Type constraints
+
+When the source or target type is not `object`, or when the generic type has constraints, Mapperly only considers mappings where the source and target types are assignable to the declared parameter types.
+
+## Derived type mappings
+
+Generic mapping methods and runtime target type parameter mappings support derived type mappings via `[MapDerivedType]`. Apply it directly to the generic mapping method:
+
+```csharp
+[Mapper]
+public static partial class ModelMapper
+{
+    [MapDerivedType<Banana, BananaDto>]
+    [MapDerivedType<Apple, AppleDto>]
+    public static partial TTarget MapFruit<TTarget>(Fruit source);
+}
+```

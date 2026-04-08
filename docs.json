@@ -1,122 +1,98 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Mapperly",
+  "theme": "luma",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#3B6CDB",
+    "light": "#EEF3FF",
+    "dark": "#1A3A8C"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/riok/mapperly"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/riok/mapperly"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "getting-started/installation",
+              "getting-started/first-mapper"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Mapping Configuration",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "configuration/mapper",
+              "configuration/properties",
+              "configuration/enum",
+              "configuration/conversions",
+              "configuration/collections"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Advanced Features",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "configuration/queryable-projections",
+              "configuration/external-mappings",
+              "configuration/user-implemented-methods",
+              "configuration/reference-handling",
+              "configuration/generic-mapping",
+              "configuration/static-mappers"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Upgrading",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "upgrading/v3",
+              "upgrading/v4",
+              "upgrading/v5"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/index",
+              "contributing/architecture",
+              "contributing/common-tasks"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Attributes",
             "pages": [
-              "api-reference/introduction"
+              "api/mapper-attribute",
+              "api/map-property-attribute",
+              "api/map-enum-attribute",
+              "api/ignore-attributes",
+              "api/object-factory-attribute"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Enums & Strategies",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/enum-mapping-strategy",
+              "api/mapping-conversion-type",
+              "api/required-mapping-strategy"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

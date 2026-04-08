@@ -1,0 +1,148 @@
+---
+title: "User-implemented mapping methods"
+description: "Mix hand-written mapping logic with Mapperly-generated mappings."
+keywords: ["user-implemented", "custom mapping", "manual mapping", "UserMapping", "AutoUserMappings", "before map", "after map"]
+---
+
+If Mapperly cannot generate a mapping, you can implement it manually by providing a method body in the mapper class. Mapperly automatically uses your implementation whenever it needs a mapping for those types.
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial CarDto CarToCarDto(Car car);
+
+    private int TimeSpanToHours(TimeSpan t) => t.Hours;
+}
+```
+
+Whenever Mapperly needs a mapping from `TimeSpan` to `int` inside `CarMapper`, it will call `TimeSpanToHours`. The parameter and return types must match the types to map exactly, including nullability.
+
+If multiple user-implemented methods match the same type pair, the first one is used by default. You can control this behavior with the [`[UserMapping]` attribute](#default-mapping-methods).
+
+## Automatic discovery
+
+By default (`AutoUserMappings = true`), Mapperly discovers any method with a valid mapping signature. To restrict discovery to only methods you explicitly mark, set `AutoUserMappings = false` and annotate the methods you want Mapperly to use with `[UserMapping]`:
+
+```csharp
+[Mapper(AutoUserMappings = false)]
+public partial class CarMapper
+{
+    public partial CarDto CarToCarDto(Car car);
+
+    [UserMapping]
+    private int TimeSpanToHours(TimeSpan t) => t.Hours;
+
+    // Not discovered — no [UserMapping] attribute
+    private int IgnoredTimeSpanToHours(TimeSpan t) => t.Minutes / 60;
+}
+```
+
+The `AutoUserMappings` setting also governs how [external mappers](/configuration/external-mappings) are discovered:
+- When `true`, all methods with a mapping signature are included.
+- When `false`, only methods with `[UserMapping]`, and partial methods if the containing class has `[Mapper]`, are included.
+
+## Ignoring a method
+
+To exclude a specific method from automatic discovery without disabling `AutoUserMappings` globally, apply `[UserMapping(Ignore = true)]`:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial CarDto CarToCarDto(Car car);
+
+    // Discovered and used automatically
+    private int TimeSpanToHours(TimeSpan t) => t.Hours;
+
+    // Excluded from automatic discovery
+    [UserMapping(Ignore = true)]
+    private int IgnoredTimeSpanToHours(TimeSpan t) => t.Minutes / 60;
+}
+```
+
+## Default mapping methods
+
+When multiple user-implemented methods exist for the same type pair, you can designate one as the default with `[UserMapping(Default = true)]`:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    public partial CarDto CarToCarDto(Car car);
+
+    [UserMapping(Default = true)]
+    private int TimeSpanToHours(TimeSpan t) => t.Hours;
+
+    private int TimeSpanToWholeHours(TimeSpan t) => (int)t.TotalHours;
+}
+```
+
+If multiple methods exist for the same type pair and none is marked as the default, `RMG060` is reported (warning by default).
+
+## Before and after map hooks
+
+To run custom logic before or after a generated mapping, wrap the generated method in a user-implemented method and mark it as the default:
+
+```csharp
+[Mapper]
+public partial class CarMapper
+{
+    private partial CarDto CarToCarDtoCore(Car car);
+
+    // Default = true ensures Mapperly uses this method for Car -> CarDto conversions
+    [UserMapping(Default = true)]
+    public CarDto CarToCarDto(Car car)
+    {
+        // custom before-map logic...
+        var dto = CarToCarDtoCore(car);
+        // custom after-map logic...
+        return dto;
+    }
+}
+```
+
+## Mapping with an existing target
+
+Mapperly respects the `ref` keyword on the target parameter when using an existing target instance, allowing the reference to be updated in the caller:
+
+```csharp
+[Mapper(AllowNullPropertyAssignment = false, UseDeepCloning = true)]
+public static partial class ArrayMapper
+{
+    [MapProperty(nameof(ArrayObject.IntArray), nameof(ArrayObject.IntArray), Use = nameof(MapArray))]
+    public static partial void Merge([MappingTarget] ArrayObject target, ArrayObject source);
+
+    private static void MapArray([MappingTarget] ref int[] target, int[] source)
+        => target = [.. target, .. source.Except(target)];
+}
+```
+
+## Reusing mapping configurations
+
+To share property mapping configurations (such as `[MapProperty]` or `[MapperIgnoreSource]`) across multiple mapping methods, use `[IncludeMappingConfiguration]`:
+
+```csharp
+[MapProperty("Weight", "WeightInGrams")]
+public partial void CopyApple(AppleDto dto, Apple apple);
+
+[IncludeMappingConfiguration(nameof(CopyApple))]
+public partial AppleDto ToApple(Apple apple);
+```
+
+You can also reference a mapping by a custom name using `[NamedMapping]`:
+
+```csharp
+[NamedMapping("BaseAppleMapping")]
+[MapProperty("Weight", "WeightInGrams")]
+public partial void CopyApple(AppleDto dto, Apple apple);
+
+[IncludeMappingConfiguration("BaseAppleMapping")]
+public partial AppleDto ToApple(Apple apple);
+```
+
+The following attributes are included when reusing a configuration: `MapProperty`, `MapPropertyFromSource`, `MapperIgnoreTarget`, `MapperIgnoreSource`, `MapperIgnoreObsoleteMembers`, `MapperRequiredMapping`, `MapValue`, and `MapDerivedType`.
+
+<Note>
+  Configurations are only reused if the mapped types are the same or a base type of the mapped type. If included configurations cause a collision, Mapperly reports an error.
+</Note>

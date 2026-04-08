@@ -1,0 +1,102 @@
+---
+title: "Type conversions"
+description: "Built-in type conversions Mapperly applies automatically, and how to control them."
+keywords: ["conversions", "MappingConversionType", "EnabledConversions", "implicit cast", "explicit cast", "ToString", "Parse"]
+---
+
+Mapperly applies automatic type conversions when no user-defined mapping exists. Conversions are evaluated in priority order — the first applicable conversion is used.
+
+## Automatic conversion types
+
+| Conversion             | Description                                                                                                    | Conditions                                                                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Direct assignment      | Assigns the source object directly to the target                                                               | Source type is assignable to the target type and `UseDeepCloning` is `false`                                                                                                                                                  |
+| Queryable              | Projects a source queryable to a target queryable                                                              | Source and target are both `IQueryable<>`                                                                                                                                                                                     |
+| Dictionary             | Maps a source dictionary to an enumerable target                                                               | Source is an `IDictionary<,>` or `IReadOnlyDictionary<,>`                                                                                                                                                                    |
+| Enumerable             | Maps each element of an enumerable source                                                                      | Source is an `IEnumerable<>`                                                                                                                                                                                                  |
+| Span                   | Maps between `Span<>`, `ReadOnlySpan<>`, and enumerables                                                       | Source or target is a `Span<>` or `ReadOnlySpan<>`                                                                                                                                                                           |
+| Tuple                  | Creates a `ValueTuple` or tuple expression                                                                     | Target is a `ValueTuple<>` or tuple expression                                                                                                                                                                                |
+| Memory                 | Maps between `Memory<>`, `ReadOnlyMemory<>`, spans, and enumerables                                            | Source or target is a `Memory<>` or `ReadOnlyMemory<>`                                                                                                                                                                       |
+| Implicit cast          | Uses an implicit cast operator                                                                                  | An implicit cast operator is defined from source type to target type                                                                                                                                                          |
+| Parse method           | Calls a static `Parse` method on the target type                                                               | Source is a `string` and target has a static method matching `TTarget Parse(string)` or `TTarget Parse(string, IFormatProvider)`                                                                                              |
+| Constructor            | Calls a constructor accepting the source as a single parameter                                                 | Target has a visible constructor with a single parameter of the source type                                                                                                                                                   |
+| String to enum         | Parses a string to match an enum member name                                                                   | Source is a `string` and target is an enum                                                                                                                                                                                    |
+| Enum to string         | Converts an enum member name to a string                                                                       | Source is an enum and target is a `string`                                                                                                                                                                                    |
+| Enum to enum           | Maps one enum to another by value or name                                                                      | Source and target are both enums                                                                                                                                                                                              |
+| Explicit cast          | Uses an explicit cast operator                                                                                  | An explicit cast operator is defined from source type to target type. **Disabled by default.**                                                                                                                                |
+| ToString               | Calls `ToString` on the source                                                                                 | Target is a `string`                                                                                                                                                                                                          |
+| ToTarget               | Calls an instance `ToTTarget()` method on the source (excluding `ToString`)                                    | Source has a method matching `TTarget ToTTarget()`                                                                                                                                                                            |
+| DateTime to DateOnly   | Converts a `DateTime` to a `DateOnly` using `DateOnly.FromDateTime`                                            | Source is `DateTime` and target is `DateOnly`                                                                                                                                                                                 |
+| DateTime to TimeOnly   | Converts a `DateTime` to a `TimeOnly` using `TimeOnly.FromDateTime`                                            | Source is `DateTime` and target is `TimeOnly`                                                                                                                                                                                 |
+| Static method          | Calls a static `ToTTarget()` on the source type, or a static `Create`, `CreateFrom`, `CreateFromTSource`, or `FromTSource` method on the target type | Source has a static `TTarget ToTTarget()` method, or target has one of the matching static factory methods. Does not apply to `DateTime` → `DateOnly`/`TimeOnly` conversions. |
+| New instance           | Creates a new instance of the target and maps all properties                                                   | Target has a visible constructor or an object factory exists for the target type                                                                                                                                              |
+
+<Note>
+  To exclude a specific candidate conversion method (such as `Parse`, instance `ToTarget` methods, or static `Create`/`From`/`To` factory methods), annotate it with `[MapperIgnore]`. This only works when the method is in the same assembly as the mapper, unless Mapperly attributes are preserved at runtime. See [Ignoring members](/configuration/properties#ignore-at-definition).
+</Note>
+
+## Disable all automatic conversions
+
+Set `EnabledConversions` to `MappingConversionType.None` to turn off all automatic conversions:
+
+```csharp
+[Mapper(EnabledConversions = MappingConversionType.None)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+## Disable specific conversions
+
+Use bitwise NOT with `MappingConversionType.All` to disable a specific conversion type:
+
+```csharp
+// Disable ToString() conversions
+[Mapper(EnabledConversions = MappingConversionType.All & ~MappingConversionType.ToStringMethod)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+## Enable only specific conversions
+
+Assign a specific set of flags to allow only those conversions:
+
+```csharp
+// Allow only constructor and explicit cast conversions
+[Mapper(EnabledConversions = MappingConversionType.Constructor | MappingConversionType.ExplicitCast)]
+public partial class CarMapper
+{
+    public partial CarDto ToDto(Car car);
+}
+```
+
+## MappingConversionType flags reference
+
+| Flag                    | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| `None`                  | No conversions enabled                                   |
+| `Constructor`           | Constructor with a single source parameter               |
+| `ImplicitCast`          | Implicit cast operator                                   |
+| `ExplicitCast`          | Explicit cast operator                                   |
+| `ParseMethod`           | Static `Parse(string)` or `Parse(string, IFormatProvider)` method |
+| `ToStringMethod`        | `ToString()` method                                      |
+| `StringToEnum`          | Parse string to enum member name                         |
+| `EnumToString`          | Enum member name to string                               |
+| `EnumToEnum`            | Enum to enum by value or name                            |
+| `EnumUnderlyingType`    | Map using the underlying type of an enum                 |
+| `DateTimeToDateOnly`    | `DateTime` → `DateOnly` via `DateOnly.FromDateTime`      |
+| `DateTimeToTimeOnly`    | `DateTime` → `TimeOnly` via `TimeOnly.FromDateTime`      |
+| `Queryable`             | `IQueryable<>` projection                                |
+| `Enumerable`            | `IEnumerable<>` element-by-element mapping               |
+| `Dictionary`            | `IDictionary<,>` / `IReadOnlyDictionary<,>` mapping      |
+| `Span`                  | `Span<>` / `ReadOnlySpan<>` mapping                      |
+| `Memory`                | `Memory<>` / `ReadOnlyMemory<>` mapping                  |
+| `Tuple`                 | `ValueTuple<>` or tuple expression                       |
+| `ToTargetMethod`        | Instance `ToTTarget()` method (excluding `ToString`)     |
+| `StaticConvertMethods`  | Static factory/conversion methods                        |
+| `Expression`            | `Expression<Func<TSource, TTarget>>` projection          |
+| `All`                   | All conversions enabled                                  |
+| `Default`               | All conversions except `ExplicitCast` (used by default)  |

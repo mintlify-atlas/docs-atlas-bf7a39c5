@@ -1,0 +1,284 @@
+---
+title: "Common tasks"
+description: "Step-by-step instructions for frequent contributor workflows in Mapperly."
+keywords: ["contributing", "tasks", "testing", "debugging", "diagnostics", "documentation", "release"]
+---
+
+This page provides step-by-step guides for common tasks you will encounter when contributing to Mapperly.
+
+## Adding a new diagnostic
+
+<Steps>
+  <Step title="Check for an existing diagnostic">
+    Before creating a new one, ensure no existing diagnostic in `Riok.Mapperly.Diagnostics.DiagnosticDescriptors.cs` already covers your use case.
+  </Step>
+  <Step title="Create the diagnostic descriptor">
+    Add a new `public static readonly` entry in `DiagnosticDescriptors.cs`, following the existing naming and formatting style.
+
+    Use `RMG<NUMBER>` as the ID, where `<NUMBER>` is the highest already-used number plus one. Check `AnalyzerReleases.Shipped.md` for the highest number — removed diagnostics may no longer appear in `DiagnosticDescriptors.cs` but their IDs must not be reused.
+  </Step>
+  <Step title="Register in AnalyzerReleases.Shipped.md">
+    Add the new diagnostic to `AnalyzerReleases.Shipped.md`. Mapperly does not use the `Unshipped` file.
+  </Step>
+  <Step title="Add documentation">
+    Create a new documentation file at `docs/docs/configuration/analyzer-diagnostics/{id}.mdx` as needed.
+
+    <Note>
+      The `analyzer-diagnostics/index.mdx` page is generated automatically from `AnalyzerReleases.Shipped.md` — you do not need to update it manually.
+    </Note>
+  </Step>
+  <Step title="Write a unit test">
+    Add a unit test that generates and asserts the new diagnostic. Use `TestHelperOptions.AllowDiagnostics` and assert with `.Should().HaveDiagnostic(...).HaveAssertedAllDiagnostics()`.
+  </Step>
+</Steps>
+
+## Adding a new public API
+
+If you introduce new public API surface in `Riok.Mapperly.Abstractions` or modify existing API surface, the `PublicApiTest` snapshot test must be updated. See [VerifyTests](#verifytests) for details on working with snapshot tests.
+
+## Add support for a new Roslyn version
+
+See also [architecture — Roslyn multi-targeting](/contributing/architecture#roslyn-multi-targeting) for background.
+
+<Steps>
+  <Step title="Update build/package.sh">
+    Add the new Roslyn version to the `roslyn_versions` array in `build/package.sh`.
+  </Step>
+  <Step title="Create a props file">
+    Create `src/Riok.Mapperly/Riok.Mapperly.Roslyn$(Version).props` following the pattern of the existing `.props` files. Define any required compiler constants and dependency references.
+  </Step>
+  <Step title="Update the default ROSLYN_VERSION">
+    Update the default `ROSLYN_VERSION` in `src/Riok.Mapperly/Riok.Mapperly.csproj`.
+  </Step>
+  <Step title="Update the CodeAnalysis dependency">
+    Update the `Microsoft.CodeAnalysis.CSharp` dependency version.
+  </Step>
+  <Step title="Update CI matrix">
+    Update the .NET version matrix of the `integration-test` GitHub Actions job (`.github/workflows/test.yml`) to include a .NET version based on the new Roslyn version.
+  </Step>
+  <Step title="Update global.json">
+    Adjust the .NET version in `global.json` as needed.
+  </Step>
+  <Step title="Update integration test helpers">
+    Add the new version to `Riok.Mapperly.IntegrationTests.Helpers.Versions` and `Riok.Mapperly.IntegrationTests.BaseMapperTest.GetCurrentVersion`.
+  </Step>
+  <Step title="Update versioned snapshots">
+    If generated code changes for the new Roslyn version, adjust `VersionedSnapshotAttribute`s as needed.
+  </Step>
+  <Step title="Update remaining files">
+    - Adjust the documentation as needed
+    - Add new preprocessor constants to `.csharpierrc.yaml`
+    - Add new GitHub required checks as needed (maintainer action)
+  </Step>
+</Steps>
+
+## Working with mapping syntax
+
+Mapperly mappings use Roslyn syntax trees. Two tools are very useful when building or debugging syntax:
+
+- **[RoslynQuoter](https://roslynquoter.azurewebsites.net/)** — converts C# code to the `SyntaxFactory` calls that produce it
+- **[SharpLab](https://sharplab.io/)** — explore C# compilation and syntax tree structure
+
+The `Riok.Mapperly.Emit.Syntax.SyntaxFactoryHelper` and `Microsoft.CodeAnalysis.CSharp.SyntaxFactory` classes are the primary APIs for constructing syntax trees within Mapperly.
+
+---
+
+## Writing and running tests
+
+Mapperly is continuously tested by GitHub Actions. Tests use [xUnit](https://xunit.net/) and [VerifyTests](https://github.com/VerifyTests/Verify) and are located in the `test` directory.
+
+Run all tests:
+
+```bash
+dotnet test
+```
+
+You can also run discovered tests from your IDE.
+
+### Unit tests
+
+Unit tests live in `tests/Riok.Mapperly.*.Tests`. Each unit test covers one unit of code or one mapping type in isolation and verifies reported diagnostics and emitted code.
+
+Key test helpers:
+- `TestSourceBuilder` — generates source code for a mapper class
+- `TestHelper` — runs the source generator and asserts or snapshots the result
+
+Unit tests only run on the latest supported target framework. They are straightforward to debug: set a breakpoint in Mapperly source and run the tests in debug mode.
+
+### Integration tests
+
+Integration tests live in `tests/Riok.Mapperly.IntegrationTests`. They implement broader "a bit of everything" mappers and verify both generated code and mapped object behavior.
+
+Locally, integration tests reference the source generator directly as an analyzer. In CI, they reference the built NuGet package and run across multiple target frameworks, including older ones like .NET Framework.
+
+**Versioned snapshots** — if snapshot content differs by target framework, apply `[VersionedSnapshot(...)]` to the test class or method. Pass each framework version that introduces a snapshot change:
+
+```csharp
+// Snapshot differs for .NET 6.0 and .NET 7.0; .NET 8.0 is the same as .NET 7.0
+[VersionedSnapshot(Versions.NET6_0 | Versions.NET7_0)]
+```
+
+This stores the snapshot three times: `default` for .NET Framework 4.8, `NET6_0` for .NET 6.0, and `NET7_0` for .NET 7.0 and later. Received snapshots from failing CI runs are saved as GitHub Actions artifacts and can be downloaded.
+
+<Tip>
+If an integration test needs debugging, consider implementing a unit test instead — unit tests are much easier to debug.
+</Tip>
+
+### VerifyTests
+
+Several tests use [VerifyTests/Verify](https://github.com/VerifyTests/Verify) and [VerifyTests/Verify.SourceGenerators](https://github.com/VerifyTests/Verify.SourceGenerators) to snapshot reported diagnostics and emitted code. IDE plugins are available for most editors to make accepting and rejecting snapshot changes easier.
+
+### Linting
+
+Fix formatting and style issues locally:
+
+```bash
+dotnet csharpier format .
+dotnet format style
+dotnet format analyzers
+```
+
+Verify no issues remain:
+
+```bash
+dotnet csharpier check .
+dotnet format style --verify-no-changes
+dotnet format analyzers --verify-no-changes
+```
+
+<Note>
+CSharpier runs automatically via a Git hook on every commit.
+</Note>
+
+---
+
+## Debugging the source generator
+
+### Debugging generated code
+
+To debug the code that Mapperly generates, set a breakpoint inside the generated source file and run. Set `EmitCompilerGeneratedFiles=true` in your project to write generated files to `obj/Debug/{tfm}/generated/Riok.Mapperly/` where you can open and debug them.
+
+### Debugging unit tests
+
+Set a breakpoint inside Mapperly source code and run the unit tests in debug mode from your IDE. This works like debugging any other .NET code.
+
+### Debugging integration tests
+
+**With `DebugRoslynComponent` support** — JetBrains Rider and Visual Studio both support the `DebugRoslynComponent` launch configuration command. Set your breakpoints and run the preconfigured `IntegrationTests` debug profile.
+
+<Note>
+Visual Studio requires the [Roslyn SDK](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/) to be installed.
+</Note>
+
+**Without `DebugRoslynComponent` support** — Mapperly uses the `DEBUG_SOURCE_GENERATOR` compile constant to trigger debugger attachment at startup:
+
+- On Windows, it calls `Debugger.Launch()`.
+- On other operating systems, it attempts to launch JetBrains Rider.
+- It waits up to 30 seconds for a debugger connection. If automatic attachment fails, you can attach manually within that window.
+
+Set the constant via a `DefineConstants` MSBuild property or by editing the `.csproj`:
+
+```xml
+<DefineConstants>DEBUG_SOURCE_GENERATOR</DefineConstants>
+```
+
+For Rider attachment to work, **Generate Shell Scripts** must be enabled in JetBrains Toolbox and the generated scripts must be on the `PATH`. Mapperly calls `rider attach-to-process {pid} {Mapperly-Sln-File}`.
+
+### Getting a stack trace from CS8785
+
+If you see `CS8785: Generator 'MapperlyGenerator' failed to generate source`, you can get a full stack trace by emitting a compiler error log:
+
+```bash
+dotnet build /p:ErrorLog=compiler-diagnostics.sarif
+```
+
+Open the generated `.sarif` file to inspect the generator exception and stack trace.
+
+---
+
+## Updating documentation
+
+The Mapperly documentation is built with [Docusaurus](https://docusaurus.io/) and lives in the `docs` directory.
+
+### Setup
+
+The docs use Node.js. A `.node-version` file specifies the required version. Use a version manager such as [fnm](https://github.com/Schniz/fnm) or [nvm](https://github.com/nvm-sh/nvm) to match it.
+
+Install dependencies:
+
+```bash
+npm i
+```
+
+### Regenerate auto-generated content
+
+Some parts of the docs (API reference, analyzer rules table, samples) are generated from the .NET build output. After building the solution, run:
+
+```bash
+npm run prebuild
+```
+
+Re-run this command whenever the source of the generated content changes.
+
+### Local preview
+
+```bash
+npm run start
+```
+
+This starts a local development server and opens the browser. Most changes are reflected live without a restart.
+
+<Note>
+The documentation search does not work in the local dev server because it depends on the static build output.
+</Note>
+
+### Linting
+
+Check for issues:
+
+```bash
+npm run lint
+```
+
+Fix issues automatically:
+
+```bash
+npm run fix
+```
+
+### Building the static site
+
+```bash
+npm run build
+```
+
+This generates static content into the `build` directory. Serve it locally with `npm run serve` or deploy it to any static hosting service.
+
+---
+
+## Release process (overview)
+
+Every push to `main` triggers a GitHub Actions workflow that creates or updates the upcoming release draft using [release-drafter](https://github.com/release-drafter/release-drafter). Changelogs are generated from PR titles and commit messages. The upcoming version is determined by PR labels:
+
+| Label | Version bump |
+|-------|-------------|
+| `no-changelog` or `dependencies` | Ignored |
+| `breaking-change` | Major |
+| `enhancement` | Minor |
+| `bug` | Patch |
+
+To publish a release, publish the GitHub draft release. You can edit the release notes before publishing.
+
+<Warning>
+If you edit the draft release notes and then another commit is pushed to `main`, your edits will be overwritten by release-drafter.
+</Warning>
+
+When the release is published, GitHub creates a tag pointing to the latest `main` commit. A GitHub Actions workflow then:
+
+1. Exports and strips Markdown from the release notes (NuGet does not support Markdown)
+2. Builds the Mapperly NuGet package
+3. Deploys the package to NuGet
+4. Attaches the built package to the GitHub release
+5. Builds and deploys the documentation
+
+To release from a specific commit rather than `HEAD` of `main`, manually create and publish a GitHub release targeting that commit.

@@ -1,0 +1,164 @@
+---
+title: "MapEnumAttribute"
+description: "Reference for [MapEnum] and [MapEnumValue] for controlling enum mappings."
+---
+
+## MapEnumAttribute
+
+Overrides the enum mapping strategy and related options for a specific mapping method. Apply it to a method that maps one enum to another, or to a method that maps an enum to or from a `string`.
+
+The mapper-level defaults (`EnumMappingStrategy`, `EnumNamingStrategy`, `EnumMappingIgnoreCase`) set in `[Mapper]` apply to all methods. `[MapEnum]` overrides those defaults for a single method.
+
+```csharp
+[Mapper]
+public partial class OrderMapper
+{
+    [MapEnum(EnumMappingStrategy.ByName)]
+    public partial OrderStatusDto MapStatus(OrderStatus status);
+}
+```
+
+### Properties
+
+<ParamField path="Strategy" type="EnumMappingStrategy" required>
+  The strategy used to map enum members. Required — pass it to the constructor.
+
+  | Value | Description |
+  |-------|-------------|
+  | `ByValue` | Matches members by their underlying integer value |
+  | `ByName` | Matches members by their name |
+  | `ByValueCheckDefined` | Like `ByValue`, but also checks the value is defined in the target enum |
+
+  ```csharp
+  [MapEnum(EnumMappingStrategy.ByName)]
+  public partial TargetEnum Map(SourceEnum source);
+  ```
+</ParamField>
+
+<ParamField path="IgnoreCase" type="bool" default="false">
+  When `true`, name comparisons are case-insensitive. Only applies when the strategy involves name matching (e.g., `ByName` or string-to-enum).
+
+  ```csharp
+  [MapEnum(EnumMappingStrategy.ByName, IgnoreCase = true)]
+  public partial TargetEnum Map(SourceEnum source);
+  ```
+</ParamField>
+
+<ParamField path="NamingStrategy" type="EnumNamingStrategy" default="MemberName">
+  Strategy used when mapping the enum from or to a `string`. Overrides `MapperAttribute.EnumNamingStrategy` for this method.
+
+  | Value | Description |
+  |-------|-------------|
+  | `MemberName` | Uses the enum member name (default) |
+  | `CamelCase` | Uses `camelCase` |
+  | `PascalCase` | Uses `PascalCase` |
+  | `SnakeCase` | Uses `snake_case` |
+  | `UpperSnakeCase` | Uses `UPPER_SNAKE_CASE` |
+  | `KebabCase` | Uses `kebab-case` |
+  | `UpperKebabCase` | Uses `UPPER-KEBAB-CASE` |
+  | `ComponentModelDescriptionAttribute` | Uses `[Description]` value, falls back to member name |
+  | `SerializationEnumMemberAttribute` | Uses `[EnumMember(Value = ...)]`, falls back to member name |
+</ParamField>
+
+<ParamField path="FallbackValue" type="object?">
+  The target enum value to use when a source value cannot be mapped, instead of throwing an exception.
+
+  ```csharp
+  [MapEnum(EnumMappingStrategy.ByName, FallbackValue = TargetStatus.Unknown)]
+  public partial TargetStatus Map(SourceStatus source);
+  ```
+
+  <Warning>
+    `FallbackValue` must be a valid member of the target enum type. Using an invalid value results in a compile-time diagnostic.
+  </Warning>
+</ParamField>
+
+---
+
+## MapEnumValueAttribute
+
+Overrides the mapping for a specific pair of enum values. Apply it to the mapping method alongside `[MapEnum]` or on its own.
+
+```csharp
+[Mapper]
+public partial class OrderMapper
+{
+    [MapEnum(EnumMappingStrategy.ByName)]
+    [MapEnumValue(SourceStatus.Pending, TargetStatus.Queued)]
+    public partial TargetStatus MapStatus(SourceStatus source);
+}
+```
+
+You can also use string values when mapping to or from `string`:
+
+```csharp
+[MapEnumValue(SourceStatus.Active, "active-status")]
+public partial string MapStatusToString(SourceStatus source);
+```
+
+### Properties
+
+<ParamField path="Source" type="object" required>
+  The source enum value (or string) to match. Pass it as the first constructor argument.
+</ParamField>
+
+<ParamField path="Target" type="object" required>
+  The target enum value (or string) to map to. Pass it as the second constructor argument.
+</ParamField>
+
+---
+
+## Required mapping strategy for enums
+
+By default, Mapperly emits a warning when there are enum members without a corresponding mapping (`RequiredMappingStrategy.Both`). You can change this globally on `[Mapper]` or for specific enum mapping methods using `[MapperRequiredMapping]`.
+
+```csharp
+[Mapper]
+public partial class OrderMapper
+{
+    // Suppress warnings for unmapped source enum values
+    [MapperRequiredMapping(RequiredMappingStrategy.Target)]
+    [MapEnum(EnumMappingStrategy.ByName)]
+    public partial TargetStatus MapStatus(SourceStatus source);
+}
+```
+
+See [`RequiredMappingStrategy`](/api/ignore-attributes#mapperrequiredmappingattribute) for the full list of strategy values.
+
+---
+
+## Examples
+
+### Map enum by name with a fallback
+
+```csharp
+[Mapper]
+public partial class OrderMapper
+{
+    [MapEnum(EnumMappingStrategy.ByName, FallbackValue = OrderStatusDto.Unknown)]
+    public partial OrderStatusDto Map(OrderStatus status);
+}
+```
+
+### Override a single enum value
+
+```csharp
+[Mapper]
+public partial class OrderMapper
+{
+    [MapEnum(EnumMappingStrategy.ByValue)]
+    [MapEnumValue(OrderStatus.Cancelled, OrderStatusDto.Voided)]
+    public partial OrderStatusDto Map(OrderStatus status);
+}
+```
+
+### Map enum to string using snake_case
+
+```csharp
+[Mapper(EnumNamingStrategy = EnumNamingStrategy.SnakeCase)]
+public partial class OrderMapper
+{
+    public partial string MapStatusToString(OrderStatus status);
+    // OrderStatus.NewOrder -> "new_order"
+}
+```

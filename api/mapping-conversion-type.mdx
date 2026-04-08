@@ -1,0 +1,77 @@
+---
+title: 'MappingConversionType'
+description: 'Flags enum controlling which type conversions Mapperly applies automatically.'
+keywords: ['conversion', 'MappingConversionType', 'EnabledConversions', 'explicit cast', 'implicit cast']
+---
+
+`MappingConversionType` is a flags enum that controls which automatic type conversions Mapperly considers when generating mapping code. Set it on `MapperAttribute.EnabledConversions`.
+
+The default value is `Default`, which enables all conversions except `ExplicitCast`.
+
+## Flag values
+
+| Value | Numeric value | Description |
+|---|---|---|
+| `None` | `0` | Disables all automatic conversions. |
+| `Constructor` | `1 << 0` | Uses a constructor on the target type that accepts the source type as its only parameter. |
+| `ImplicitCast` | `1 << 1` | Uses an implicit cast operator from source to target. |
+| `ExplicitCast` | `1 << 2` | Uses an explicit cast operator from source to target. Not included in `Default`. |
+| `ParseMethod` | `1 << 3` | When source is `string`, calls a static `Parse(string)` or `Parse(string, IFormatProvider)` method on the target type. |
+| `ToStringMethod` | `1 << 4` | When target is `string`, calls `ToString()` on the source. |
+| `StringToEnum` | `1 << 5` | When source is `string` and target is an enum, parses the string as an enum member name. |
+| `EnumToString` | `1 << 6` | When source is an enum and target is `string`, uses the enum member name. |
+| `EnumToEnum` | `1 << 7` | Maps one enum type to another according to the configured `EnumMappingStrategy`. |
+| `DateTimeToDateOnly` | `1 << 8` | When source is `DateTime` and target is `DateOnly`, calls `DateOnly.FromDateTime(source)`. |
+| `DateTimeToTimeOnly` | `1 << 9` | When source is `DateTime` and target is `TimeOnly`, calls `TimeOnly.FromDateTime(source)`. |
+| `Queryable` | `1 << 10` | Projects `IQueryable<TSource>` to `IQueryable<TTarget>` using object initializers. |
+| `Enumerable` | `1 << 11` | Maps `IEnumerable<TSource>` to `IEnumerable<TTarget>`, mapping each element individually. |
+| `Dictionary` | `1 << 12` | Maps `IDictionary<,>` or `IReadOnlyDictionary<,>`, mapping each key-value pair individually. |
+| `Span` | `1 << 13` | Maps `Span<T>` or `ReadOnlySpan<T>`, mapping each element individually. |
+| `Memory` | `1 << 14` | Maps `Memory<T>` or `ReadOnlyMemory<T>`, mapping each element individually. |
+| `Tuple` | `1 << 15` | Maps to a `ValueTuple` or tuple expression such as `(A: 10, B: 12)`. Supports positional and named mapping. |
+| `EnumUnderlyingType` | `1 << 16` | Allows mapping between an enum and its underlying numeric type. |
+| `ToTargetMethod` | `1 << 17` | Uses a `ToTTarget()` instance method on the source type (excluding `ToString`). |
+| `StaticConvertMethods` | `1 << 18` | Uses static conversion methods: `ToTTarget()` on the source type, or `Create(TSource)`, `CreateFrom(TSource)`, `From(TSource)`, or similar factory methods on the target type. Does not apply to `DateTime` → `DateOnly`/`TimeOnly` (use `DateTimeToDateOnly` / `DateTimeToTimeOnly` for those). |
+| `Expression` | `1 << 19` | Maps to `Expression<Func<TSource, TTarget>>`, using object initializers and inlining mapping code. |
+| `All` | `~None` | Enables all supported conversions. |
+| `Default` | `All & ~ExplicitCast` | Enables all conversions except `ExplicitCast`. This is the default. |
+
+## Usage
+
+### Disable all automatic conversions
+
+```csharp
+[Mapper(EnabledConversions = MappingConversionType.None)]
+public partial class CarMapper
+{
+    public partial CarDto MapCar(Car car);
+}
+```
+
+### Disable a specific conversion
+
+Use `All` with a bitwise NOT to exclude a single type. This example disables `ToString` conversions:
+
+```csharp
+[Mapper(EnabledConversions = MappingConversionType.All & ~MappingConversionType.ToStringMethod)]
+public partial class CarMapper
+{
+    public partial CarDto MapCar(Car car);
+}
+```
+
+### Enable only specific conversions
+
+Combine individual flags to allow only the conversions you need:
+
+```csharp
+[Mapper(EnabledConversions = MappingConversionType.Constructor | MappingConversionType.ExplicitCast)]
+public partial class CarMapper
+{
+    public partial CarDto MapCar(Car car);
+}
+```
+
+<Tip>
+To exclude a specific method from being used as a conversion (such as a `Parse` or `ToTarget` instance method), annotate it with `[MapperIgnore]` rather than disabling the entire conversion type.
+</Tip>
